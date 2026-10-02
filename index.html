@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Coast 2 Coast Karting — Hayle 3D Time Trial</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<canvas id="gl"></canvas>
+
+<div class="hud">
+  <div class="clock">
+    <div class="lbl">Lap Time</div>
+    <div class="time" id="h-time">0:00.000</div>
+    <div class="delta" id="h-delta"></div>
+  </div>
+
+  <div class="stats">
+    <div class="row best"><span>Best</span><span class="v" id="h-best">--:--.---</span></div>
+    <div class="row"><span>Last</span><span class="v" id="h-last">--:--.---</span></div>
+    <div class="row"><span>Laps</span><span class="v" id="h-laps">0</span></div>
+    <div class="row"><span>Camera</span><span class="v" id="cam-name">Chase</span></div>
+  </div>
+
+  <div class="map-wrap"><canvas id="minimap"></canvas></div>
+
+  <div class="speed">
+    <div class="mph"><span id="h-mph">0</span></div>
+    <div class="unit">MPH</div>
+    <div class="surf ok" id="h-surf">TRACK</div>
+  </div>
+
+  <div class="times hidden" id="times-panel">
+    <h3>Local Best Times</h3>
+    <ol id="times-list"></ol>
+    <div class="hint">This device only</div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <div class="countdown" id="countdown"></div>
+
+  <div class="touch">
+    <div class="tbtn" id="t-left">◀</div>
+    <div class="tbtn" id="t-right">▶</div>
+    <div class="tbtn" id="t-brake">✋</div>
+    <div class="tbtn" id="t-gas">▲</div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <h1>🏁 Coast 2 Coast Karting</h1>
+  <div class="sub">Hayle, Cornwall — 3D Time Trial</div>
+
+  <div class="grid">
+    <div><b>Accelerate</b> ↑ / W</div>
+    <div><b>Brake / Reverse</b> ↓ / S</div>
+    <div><b>Steer left</b> ← / A</div>
+    <div><b>Steer right</b> → / D</div>
+    <div><b>Change camera</b> C</div>
+    <div><b>Reset to grid</b> R</div>
+  </div>
+
+  <button id="go" disabled>Loading…</button>
+  <div class="loadbar"><div class="loadbar-fill" id="loadfill"></div></div>
+  <div class="loadnote" id="loadnote">fetching track surfaces…</div>
+
+  <div class="note">
+    The <b>current</b> layout — the circuit as hand-mapped in OpenStreetMap in July 2025,
+    not the older pre-rebuild track that still shows in most satellite imagery. OSM tags a
+    short section <i>covered</i> and the onboard lap video drives through a bridge at exactly
+    that point. 719&nbsp;m, 14 corners, elevation sampled from EU-DEM. Regulars lap here in
+    the low 40s. Fan-made for practice, not an official map. Times saved in this browser only.
+  </div>
+</div>
+
+<div class="fatal" id="fatal" hidden>
+  <h2>Couldn't start</h2>
+  <p id="fatal-msg"></p>
+  <p class="fatal-hint">This build loads three.js and its texture sets over the network, so it
+  needs to be opened from a local server rather than a <code>file://</code> path.
+  Run <code>node server.js</code> in the CartGame folder and open
+  <code>http://localhost:3001</code>.</p>
+</div>
+
+<script src="track-data.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="game.js"></script>
+<script>
+  // if the module never boots (file:// origin, offline, blocked CDN) say so
+  setTimeout(() => {
+    if (!window.__kartBooted) {
+      document.getElementById("fatal").hidden = false;
+      document.getElementById("fatal-msg").textContent =
+        "The 3D engine didn't load.";
+    }
+  }, 9000);
+</script>
+</body>
+</html>
