@@ -51,6 +51,7 @@
     <div class="tbtn" id="t-gas">GAS</div>
     <div class="tbtn small" id="t-pause">❚❚</div>
     <div class="tbtn small" id="t-cam">CAM</div>
+    <button class="tilt-tap hidden" id="tilt-tap">Tap to turn on tilt steering</button>
   </div>
 </div>
 
@@ -127,6 +128,7 @@
       <button class="opt touch-only" data-key="touchSteer" data-values="strip,tilt" data-names="Touch Strip,Tilt Phone" data-label="Phone Steering"></button>
       <button class="opt touch-only" data-key="tiltInvert" data-values="off,on" data-names="Normal,Reversed" data-label="Tilt Direction"></button>
       <button class="opt touch-only" data-key="tiltRange" data-values="40,32,25,18" data-names="Gentle,Normal,Quick,Very Quick" data-label="Tilt Sensitivity"></button>
+      <button class="opt" data-key="brakeAssist" data-values="on,off" data-names="On,Off (realistic)" data-label="Brake Assist"></button>
       <button class="opt" data-key="steer" data-values="0.6,0.8,1,1.25,1.5" data-names="Very Low,Low,Normal,High,Very High" data-label="Stick Sensitivity"></button>
       <button class="opt" data-key="volume" data-values="0,0.25,0.5,0.75,1" data-names="Off,25%,50%,75%,100%" data-label="Volume"></button>
       <button class="opt" data-key="rumble" data-values="on,off" data-names="On,Off" data-label="Rumble"></button>
@@ -149,7 +151,7 @@
       <tr><td>Pause</td><td>Esc / P</td><td>Start / Options</td></tr>
       <tr><td>Standings</td><td>Tab</td><td>—</td></tr>
     </table>
-    <div class="note">Karts brake mostly on the rear axle and have no differential: brake in a straight line, turn in smoothly and feed the power in. Lift mid-corner and the rear will rotate. Grass has half the grip.</div>
+    <div class="note">Karts brake mostly on the rear axle and have no differential: brake in a straight line, turn in smoothly and feed the power in. With Brake Assist off, too much brake locks the wheels — locked rears spin you round, locked fronts won't steer. Grass has half the grip.</div>
     <nav class="menu"><button data-back>Back</button></nav>
   </section>
 
