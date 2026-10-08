@@ -17,12 +17,12 @@ const settings = { steerSensitivity: 1.0, rumble: true };
 export function setInputSettings(s) { Object.assign(settings, s); }
 
 const keys = Object.create(null);
-const pressedOnce = new Set();
+const pressedOnce = new Map();     // key code -> presses not yet consumed
 let lastDevice = "keyboard";
 
 addEventListener("keydown", e => {
   if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "SELECT")) return;
-  if (!keys[e.code]) pressedOnce.add(e.code);
+  if (!keys[e.code] || e.repeat) pressedOnce.set(e.code, (pressedOnce.get(e.code) || 0) + 1);
   keys[e.code] = true;
   lastDevice = "keyboard";
   if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Tab"].includes(e.code)) e.preventDefault();
@@ -149,10 +149,13 @@ const ACTIONS = {
 };
 export function action(name) {
   const a = ACTIONS[name];
-  return a.keys.some(k => pressedOnce.has(k)) || a.pad.some(b => padEdges.has(b));
+  return a.keys.some(k => pressedOnce.get(k) > 0) || a.pad.some(b => padEdges.has(b));
 }
-// Call at the end of each frame.
-export function endFrame() { pressedOnce.clear(); }
+// Call at the end of each frame. Several presses inside one frame play out
+// over the following frames instead of collapsing into one.
+export function endFrame() {
+  for (const [k, n] of pressedOnce) { if (n > 1) pressedOnce.set(k, n - 1); else pressedOnce.delete(k); }
+}
 
 export function inputDevice() { return lastDevice; }
 export function gamepadName() { return pad.present ? padName : ""; }
