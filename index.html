@@ -72,7 +72,7 @@
     <nav class="menu">
       <button data-go="scr-race">Race</button>
       <button data-act="trial">Time Trial</button>
-      <button data-go="scr-online">Online</button>
+      <button data-go="scr-online">Race Friends</button>
       <button data-go="scr-settings">Settings</button>
       <button data-go="scr-help">How to Play</button>
     </nav>
@@ -93,16 +93,16 @@
   </section>
 
   <section class="screen" id="scr-online">
-    <h2>Online</h2>
+    <h2>Race Friends</h2>
     <div class="field"><label for="in-name">Driver name</label><input id="in-name" maxlength="16" autocomplete="off" spellcheck="false" /></div>
     <nav class="menu">
       <button class="opt" data-key="color" data-values="#d8202a,#1f6fb2,#e6a417,#2a9d5b,#7a3fb8,#f06d1a,#e83e8c,#eceff1" data-label="Kart" data-swatch="1"></button>
-      <button class="primary" data-act="quick">Quick Match</button>
-      <button data-act="create">Create Private Room</button>
-      <div class="field inline"><input id="in-code" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false" /><button data-act="join">Join Room</button></div>
+      <button class="primary" data-act="party-create">Create Party</button>
+      <div class="field inline"><input id="in-code" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false" /><button data-act="party-join">Join Party</button></div>
+      <button data-act="quick" id="btn-quick" class="hidden">Quick Match (public)</button>
       <button data-back>Back</button>
     </nav>
-    <div class="note" id="online-note"></div>
+    <div class="note" id="online-note">Create a party and send your friends the 4-letter code. They open the game, tap Race Friends, type the code and join.</div>
   </section>
 
   <section class="screen" id="scr-lobby">
@@ -124,6 +124,9 @@
       <button class="opt" data-key="quality" data-values="low,medium,high" data-label="Graphics"></button>
       <button class="opt" data-key="camera" data-values="0,1,2,3,4" data-names="Chase,Far Chase,Cockpit,Bumper,Heli" data-label="Camera"></button>
       <button class="opt" data-key="units" data-values="mph,kmh" data-names="MPH,KM/H" data-label="Speed"></button>
+      <button class="opt touch-only" data-key="touchSteer" data-values="strip,tilt" data-names="Touch Strip,Tilt Phone" data-label="Phone Steering"></button>
+      <button class="opt touch-only" data-key="tiltInvert" data-values="off,on" data-names="Normal,Reversed" data-label="Tilt Direction"></button>
+      <button class="opt touch-only" data-key="tiltRange" data-values="40,32,25,18" data-names="Gentle,Normal,Quick,Very Quick" data-label="Tilt Sensitivity"></button>
       <button class="opt" data-key="steer" data-values="0.6,0.8,1,1.25,1.5" data-names="Very Low,Low,Normal,High,Very High" data-label="Stick Sensitivity"></button>
       <button class="opt" data-key="volume" data-values="0,0.25,0.5,0.75,1" data-names="Off,25%,50%,75%,100%" data-label="Volume"></button>
       <button class="opt" data-key="rumble" data-values="on,off" data-names="On,Off" data-label="Rumble"></button>

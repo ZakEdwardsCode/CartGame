@@ -9,7 +9,7 @@ import * as THREE from "three";
 import { Sky } from "three/addons/objects/Sky.js";
 import {
   N, wrap, cx, cz, heading, halfWidth, ELEV, ELEV_MEAN, RX, RZ, FX, FZ, CURV, KERB_RUNS, KERB_W,
-  BAR_L, BAR_R, SHARED_L, SHARED_R, LINE, COVERED_AT, BOUNDS, nearestGlobal, gridSlot,
+  BAR_L, BAR_R, SHARED_L, SHARED_R, LINE, COVERED_AT, BOUNDS, nearestGlobal, gridSlot, minElevNear,
 } from "./track.js";
 import { buildKart } from "./kart-model.js";
 import { mulberry32 } from "./ai.js";
@@ -219,7 +219,8 @@ export class TrackWorld {
       const x = p.getX(v) + mx, z = p.getZ(v) + mz;
       const n = nearTrack(x, z);
       const d = n.i >= 0 ? n.d : 999;
-      const near = n.i >= 0 ? ELEV[n.i] : ELEV_MEAN;
+      // under and beside the tarmac, sit below the lowest section nearby
+      const near = n.i >= 0 ? (d < 14 ? minElevNear(x, z, 12) - 0.06 : ELEV[n.i]) : ELEV_MEAN;
       const t = Math.min(1, Math.max(0, (d - 12) / 90));
       const e = t * t * (3 - 2 * t);
       // flat near the circuit, rolling Cornish fields further out
@@ -242,7 +243,7 @@ export class TrackWorld {
     this.scene.add(m);
     this.terrainHeight = (x, z) => {
       const n = nearTrack(x, z);
-      const d = n.i >= 0 ? n.d : 999, near = n.i >= 0 ? ELEV[n.i] : ELEV_MEAN;
+      const d = n.i >= 0 ? n.d : 999, near = n.i >= 0 ? (d < 14 ? minElevNear(x, z, 12) - 0.06 : ELEV[n.i]) : ELEV_MEAN;
       const t = Math.min(1, Math.max(0, (d - 12) / 90)), e = t * t * (3 - 2 * t);
       const far = Math.max(0, Math.hypot(x - mx, z - mz) - 150);
       return near * (1 - e) + ELEV_MEAN * e + rnd(x, z) * e + far * far * 0.00012 + Math.max(0, far - 80) * 0.03 * (1 + Math.sin(x * 0.01)) - 0.06;
@@ -261,8 +262,8 @@ export class TrackWorld {
       const patch = 0.95 + 0.05 * Math.sin(i * 0.031) + 0.03 * Math.sin(i * 0.13);
       for (let k = 0; k < LANES; k++) {
         let off, yy, shade;
-        if (k === 0) { off = -(l + sl); yy = y - 0.09; shade = 0.85; }
-        else if (k === LANES - 1) { off = r + sr; yy = y - 0.09; shade = 0.85; }
+        if (k === 0) { off = -(l + sl); yy = y - 0.03; shade = 0.85; }
+        else if (k === LANES - 1) { off = r + sr; yy = y - 0.03; shade = 0.85; }
         else {
           const f = (k - 1) / (LANES - 3);
           off = -l + f * (l + r);
@@ -288,7 +289,8 @@ export class TrackWorld {
     geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
     geo.setIndex(idx);
     geo.computeVertexNormals();
-    const mat = new THREE.MeshStandardMaterial({ color: 0x9a9a98, roughness: 0.95, metalness: 0, vertexColors: true, ...pbr });
+    // drawn slightly towards the camera so distant grass can never flicker through
+    const mat = new THREE.MeshStandardMaterial({ color: 0x9a9a98, roughness: 0.95, metalness: 0, vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2, ...pbr });
     if (mat.normalScale) mat.normalScale.set(1.2, 1.2);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
@@ -297,7 +299,7 @@ export class TrackWorld {
 
   buildLines() {
     const W = 0.09;
-    const mat = new THREE.MeshStandardMaterial({ color: 0xeeeee8, roughness: 0.7 });
+    const mat = new THREE.MeshStandardMaterial({ color: 0xeeeee8, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
     for (const side of [-1, 1]) {
       const pos = [], idx = [];
       for (let i = 0; i < N; i++) {
@@ -381,8 +383,8 @@ export class TrackWorld {
 
     const tyreGeo = new THREE.TorusGeometry(0.25, 0.11, 8, 16); tyreGeo.rotateX(Math.PI / 2);
     const tyreMat = new THREE.MeshStandardMaterial({ color: 0x1c1c20, roughness: 0.95 });
-    const blockGeo = new THREE.BoxGeometry(0.42, 0.62, 1.0);
-    blockGeo.translate(0, 0.31, 0);
+    const blockGeo = new THREE.BoxGeometry(0.42, 1.0, 1.0);
+    blockGeo.translate(0, 0.12, 0);          // reaches below ground where the ground dips
     const blockMat = new THREE.MeshStandardMaterial({ roughness: 0.45, metalness: 0 });
     const tyres = [], blocks = [], blockCols = [];
     const fencePosts = [];
@@ -419,7 +421,7 @@ export class TrackWorld {
           const [ox, oz] = P(i, (bar + 14) * side);
           if (nearestGlobal(ox, oz, -1, 0, 16).i < 0) fence.push(k);
         }
-        const g = ribbon(front, [0.02, 0.56], 1 / 10.5);
+        const g = ribbon(front, [-0.4, 0.56], 1 / 10.5);
         const belt = new THREE.Mesh(g, beltMat);
         belt.castShadow = true; belt.receiveShadow = true;
         this.scene.add(belt);

@@ -88,6 +88,22 @@ export function nearestGlobal(x, z, around = -1, excl = 0, maxR = 24) {
   return { i: best, d: Math.sqrt(bestD) };
 }
 
+// lowest track elevation within r metres (the ground must stay under every
+// nearby section, even where two run side by side at different heights)
+export function minElevNear(x, z, r = 9) {
+  const gx = Math.floor(x / CELL), gz = Math.floor(z / CELL), R = Math.ceil(r / CELL);
+  let m = Infinity;
+  for (let ix = gx - R; ix <= gx + R; ix++) for (let iz = gz - R; iz <= gz + R; iz++) {
+    const cell = grid.get(key(ix, iz));
+    if (!cell) continue;
+    for (const i of cell) {
+      const dx = cx(i) - x, dz = cz(i) - z;
+      if (dx * dx + dz * dz <= r * r && ELEV[i] < m) m = ELEV[i];
+    }
+  }
+  return m;
+}
+
 // ---------------------------------------------------------------------------
 // Projection of a world point onto the track near a hint index.
 // Returns index, continuous along-offset, signed lateral offset and elevation.
