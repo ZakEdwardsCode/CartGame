@@ -17,7 +17,7 @@ import { mulberry32 } from "./ai.js";
 const PH = "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k";
 
 export const QUALITY = {
-  low:    { pixelRatio: 1.0, shadow: 1024, ssao: false, bloom: false, smaa: false, trees: 120, tufts: 0,    aniso: 2 },
+  low:    { pixelRatio: 1.0, shadow: 1024, ssao: false, bloom: false, smaa: false, trees: 90,  tufts: 0,    aniso: 2, terrain: 110 },
   medium: { pixelRatio: 1.5, shadow: 2048, ssao: false, bloom: true,  smaa: true,  trees: 260, tufts: 2500, aniso: 8 },
   high:   { pixelRatio: 2.0, shadow: 4096, ssao: true,  bloom: true,  smaa: true,  trees: 420, tufts: 7000, aniso: 16 },
 };
@@ -202,7 +202,7 @@ export class TrackWorld {
 
   // --- terrain ---------------------------------------------------------------
   buildTerrain(pbr) {
-    const SIZE = 900, SEG = 220;
+    const SIZE = 900, SEG = this.q.terrain || 220;
     const g = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG);
     g.rotateX(-Math.PI / 2);
     const p = g.attributes.position;

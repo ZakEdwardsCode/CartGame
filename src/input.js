@@ -42,8 +42,34 @@ export function bindTouchControls(root) {
     el.addEventListener("touchend", u, { passive: false });
     el.addEventListener("touchcancel", u, { passive: false });
   };
-  bind("#t-left", () => touch.steer = 1, () => { if (touch.steer > 0) touch.steer = 0; });
-  bind("#t-right", () => touch.steer = -1, () => { if (touch.steer < 0) touch.steer = 0; });
+  // steering strip: where your thumb sits across it sets how far you steer
+  const zone = root.querySelector("#t-steer");
+  if (zone) {
+    const knob = zone.querySelector(".knob");
+    let id = null;
+    const set = t => {
+      const r = zone.getBoundingClientRect();
+      const f = Math.max(-1, Math.min(1, (t.clientX - (r.left + r.width / 2)) / (r.width * 0.42)));
+      touch.steer = -Math.sign(f) * Math.pow(Math.abs(f), 1.25);       // + = left
+      if (knob) knob.style.transform = `translateX(${f * r.width * 0.42}px)`;
+    };
+    const find = e => [...e.changedTouches].find(t => t.identifier === id);
+    zone.addEventListener("touchstart", e => {
+      e.preventDefault();
+      const t = e.changedTouches[0];
+      id = t.identifier; touch.active = true; lastDevice = "touch";
+      zone.classList.add("active"); set(t);
+    }, { passive: false });
+    zone.addEventListener("touchmove", e => { e.preventDefault(); const t = find(e); if (t) set(t); }, { passive: false });
+    const end = e => {
+      e.preventDefault();
+      if (!find(e)) return;
+      id = null; touch.steer = 0; zone.classList.remove("active");
+      if (knob) knob.style.transform = "";
+    };
+    zone.addEventListener("touchend", end, { passive: false });
+    zone.addEventListener("touchcancel", end, { passive: false });
+  }
   bind("#t-gas", () => touch.accel = 1, () => touch.accel = 0);
   bind("#t-brake", () => touch.brake = 1, () => touch.brake = 0);
 }

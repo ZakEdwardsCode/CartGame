@@ -41,7 +41,7 @@ const settings = Object.assign({
   quality: IS_MOBILE ? "low" : "medium", camera: "0", units: "mph", steer: "1", volume: "0.75",
   rumble: "on", fps: "off", laps: "5", opponents: "5", difficulty: "medium", grid: "back",
   color: "#d8202a", onlineLaps: "3", name: "",
-}, (() => { try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch { return {}; } })());
+}, IS_MOBILE ? { opponents: "3", laps: "3" } : {}, (() => { try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch { return {}; } })());
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch {} };
 const Q = QUALITY[settings.quality] || QUALITY.medium;
 
@@ -53,7 +53,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: !Q.smaa, powerPref
 renderer.setPixelRatio(Math.min(Q.pixelRatio, window.devicePixelRatio || 1));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = settings.quality === "low" ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.9;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -550,7 +550,24 @@ function endSession() {
   if (track) track.setStartLights(0);
 }
 
+function nextCamera() {
+  if (!session || cam.mode === "tv") return;
+  const m = (Number(settings.camera) + 1) % 5;
+  settings.camera = String(m); saveSettings(); renderOpts("camera"); cam.setMode(m);
+}
+
+// phones: go fullscreen and landscape when a race starts (ignored where refused)
+function phoneFullscreen() {
+  if (!IS_TOUCH) return;
+  const el = document.documentElement;
+  try {
+    const p = el.requestFullscreen ? el.requestFullscreen({ navigationUI: "hide" }) : null;
+    if (p && p.then) p.then(() => screen.orientation?.lock?.("landscape").catch(() => {})).catch(() => {});
+  } catch {}
+}
+
 function enterDriving() {
+  phoneFullscreen();
   closeMenus();
   hud(true);
   cam.setMode(Number(settings.camera));
@@ -1103,7 +1120,8 @@ async function boot() {
   showScreen("scr-loading", true);
   for (const b of document.querySelectorAll(".opt")) renderOpt(b);
   $("fps").classList.toggle("hidden", settings.fps !== "on");
-  if (IS_TOUCH) $("touch").classList.add("on");
+  if (IS_TOUCH) { $("touch").classList.add("on"); $("hud").classList.add("touchmode"); }
+  $("t-cam").addEventListener("touchstart", e => { e.preventDefault(); nextCamera(); }, { passive: false });
   bindTouchControls(document);
   $("t-pause").addEventListener("touchstart", e => { e.preventDefault(); pause(); }, { passive: false });
   addEventListener("pad-change", e => {
@@ -1139,7 +1157,7 @@ async function boot() {
     const inMenu = menuInput();
     if (!inMenu && session && session.mode !== "demo") {
       if (action("pause")) pause();
-      if (action("camera")) { const m = (Number(settings.camera) + 1) % 5; settings.camera = String(m); saveSettings(); renderOpts("camera"); cam.setMode(m); }
+      if (action("camera")) nextCamera();
     }
     if (session && !paused) session.update(dt);
     const drive = readDriving(0);
