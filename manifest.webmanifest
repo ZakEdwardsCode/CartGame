@@ -1,0 +1,11 @@
+{
+  "name": "Coast 2 Coast Karting",
+  "short_name": "C2C Karting",
+  "description": "Kart racing at Coast 2 Coast Karting, Hayle — AI races, time trial and online multiplayer.",
+  "start_url": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0d0f0e",
+  "theme_color": "#0d0f0e",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

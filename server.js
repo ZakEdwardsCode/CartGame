@@ -1,52 +1,93 @@
-// Zero-dependency static file server for the game — Node built-ins only.
-// Usage:  node server.js [port]        (default port 3001)
+// ============================================================================
+// Coast 2 Coast Karting — game server. Node built-ins only, no npm install.
 //
-// Lets you open the game from another device (phone, tablet) on the same
-// network, or pair it with a Cloudflare quick tunnel the same way the other
-// project here does:  cloudflared.exe tunnel --url http://localhost:3001
+//   node server.js [port]          (default: $PORT or 3001)
+//
+// Serves the game over http and runs the online race server on /ws, so one
+// deployment (Render, Fly.io, Railway, a VPS...) gives you the whole game
+// with multiplayer. See README → "Publishing".
+// ============================================================================
 
-const http = require("http");
-const fs = require("fs");
-const path = require("path");
+import http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { attachWebSocket } from "./server/ws.js";
+import { RaceServer } from "./server/race.js";
 
-const PORT = Number(process.argv[2]) || 3001;
-const ROOT = __dirname;
+const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const PORT = Number(process.argv[2]) || Number(process.env.PORT) || 3001;
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".webmanifest": "application/manifest+json",
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
+  ".glb": "model/gltf-binary",
+  ".ogg": "audio/ogg",
+  ".mp3": "audio/mpeg",
 };
+// only these top-level entries are public
+const PUBLIC = new Set(["index.html", "style.css", "config.js", "track-data.js", "manifest.webmanifest", "src", "assets", "icon.svg"]);
 
 const server = http.createServer((req, res) => {
-  let reqPath = decodeURIComponent(req.url.split("?")[0]);
+  let reqPath;
+  try { reqPath = decodeURIComponent((req.url || "/").split("?")[0]); }
+  catch { res.writeHead(400); res.end(); return; }
   if (reqPath === "/") reqPath = "/index.html";
 
-  const filePath = path.normalize(path.join(ROOT, reqPath));
-  if (!filePath.startsWith(ROOT)) {
-    res.writeHead(403);
-    res.end("Forbidden");
+  if (reqPath === "/health") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true, ...race.stats() }));
     return;
   }
 
+  const rel = path.normalize(reqPath).replace(/^([/\\])+/, "");
+  const top = rel.split(/[/\\]/)[0];
+  const filePath = path.join(ROOT, rel);
+  if (!PUBLIC.has(top) || !filePath.startsWith(ROOT + path.sep) || rel.split(/[/\\]/).some(s => s.startsWith("."))) {
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.end("404 Not Found");
+    return;
+  }
   fs.readFile(filePath, (err, data) => {
     if (err) {
       res.writeHead(404, { "Content-Type": "text/plain" });
-      res.end("404 Not Found: " + reqPath);
+      res.end("404 Not Found");
       return;
     }
     const ext = path.extname(filePath).toLowerCase();
-    res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream" });
+    res.writeHead(200, {
+      "Content-Type": MIME[ext] || "application/octet-stream",
+      "Cache-Control": ext === ".html" ? "no-cache" : "public, max-age=300",
+    });
     res.end(data);
   });
 });
 
+const race = new RaceServer({ log: (...a) => console.log(new Date().toISOString().slice(11, 19), ...a) });
+const sockets = new Set();
+attachWebSocket(server, "/ws", ws => {
+  sockets.add(ws);
+  ws.on("close", () => sockets.delete(ws));
+  race.connect(ws);
+});
+
+// keep idle connections alive through proxies; drop dead ones
+setInterval(() => {
+  const t = Date.now();
+  for (const ws of sockets) {
+    if (t - ws.lastSeen > 45000) ws.close(1001);
+    else ws.ping();
+  }
+}, 15000).unref();
+
 server.listen(PORT, () => {
-  console.log(`Coast 2 Coast Karting — serving on http://localhost:${PORT}`);
-  console.log("Open that URL in a browser, or tunnel it for another device.");
+  console.log(`Coast 2 Coast Karting — http://localhost:${PORT}  (multiplayer on ws://localhost:${PORT}/ws)`);
 });
