@@ -74,6 +74,52 @@ export function bindTouchControls(root) {
   bind("#t-brake", () => touch.brake = 1, () => touch.brake = 0);
 }
 
+// --- tilt steering ------------------------------------------------------------
+// Hold the phone sideways like a steering wheel. The roll of the screen against
+// gravity is worked out from the orientation sensor, so it works whether the
+// phone is held upright or tipped back. "Centre" is wherever it is held when
+// calibrate() runs (at the start lights).
+export const tilt = { enabled: false, working: false, steer: 0, roll: 0, zero: 0, invert: false, range: 28 };
+let tiltListening = false;
+function onOrientation(e) {
+  if (e.beta == null || e.gamma == null) return;
+  tilt.working = true;
+  const b = e.beta * Math.PI / 180, g = e.gamma * Math.PI / 180;
+  // "down" in device coordinates (x right, y up the phone, z out of the screen)
+  const dx = Math.sin(g) * Math.cos(b), dy = -Math.sin(b);
+  // into screen coordinates for the current screen rotation
+  const ang = ((screen.orientation && screen.orientation.angle) ?? window.orientation ?? 0) * Math.PI / 180;
+  const sx = dx * Math.cos(ang) - dy * Math.sin(ang);
+  const sy = dx * Math.sin(ang) + dy * Math.cos(ang);
+  if (Math.hypot(sx, sy) < 0.12) return;          // lying flat: no reliable roll
+  const roll = Math.atan2(sx, -sy) * 180 / Math.PI;  // + = right side down
+  tilt.roll += (roll - tilt.roll) * 0.35;            // light smoothing
+}
+// must be called from a tap (iOS asks permission then)
+export async function enableTilt() {
+  try {
+    const D = window.DeviceOrientationEvent;
+    if (D && typeof D.requestPermission === "function") {
+      const r = await D.requestPermission();
+      if (r !== "granted") return false;
+    }
+  } catch { return false; }
+  if (!tiltListening) { addEventListener("deviceorientation", onOrientation); tiltListening = true; }
+  tilt.enabled = true;
+  return true;
+}
+export function disableTilt() { tilt.enabled = false; tilt.steer = 0; }
+export function calibrateTilt() { tilt.zero = tilt.roll; }
+function tiltSteer() {
+  if (!tilt.enabled || !tilt.working) return 0;
+  let a = tilt.roll - tilt.zero;
+  while (a > 180) a -= 360; while (a < -180) a += 360;
+  const dead = 2;
+  const v = Math.abs(a) < dead ? 0 : Math.sign(a) * (Math.abs(a) - dead) / (tilt.range - dead);
+  const s = -Math.max(-1, Math.min(1, v));          // right side down = steer right
+  return tilt.invert ? -s : s;
+}
+
 // --- gamepad ----------------------------------------------------------------
 let padIndex = -1;
 let padName = "";
@@ -147,7 +193,8 @@ export function readDriving(dt) {
   const d = target - kb.steer;
   kb.steer += Math.sign(d) * Math.min(Math.abs(d), rate * dt);
 
-  let steer = kb.steer + touch.steer + pad.steer;
+  tilt.steer = tiltSteer();
+  let steer = kb.steer + touch.steer + pad.steer + tilt.steer;
   let throttle = (keys.ArrowUp || keys.KeyW) ? 1 : 0;
   let brake = (keys.ArrowDown || keys.KeyS || keys.Space) ? 1 : 0;
   throttle = Math.max(throttle, touch.accel, pad.throttle);

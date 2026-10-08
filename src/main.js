@@ -19,7 +19,9 @@ import { Kart, World, SURFACES } from "./physics.js";
 import { AIDriver, DIFFICULTY } from "./ai.js";
 import {
   pollInput, readDriving, action, endFrame, rumble, bindTouchControls, setInputSettings, gamepadName,
+  tilt, enableTilt, disableTilt, calibrateTilt,
 } from "./input.js";
+import { PartyNet } from "./party.js";
 import { NetClient, defaultServerUrl } from "./net.js";
 import { GameAudio } from "./audio.js";
 import { buildKart, poseKart } from "./kart-model.js";
@@ -40,7 +42,7 @@ const SETTINGS_KEY = "c2c_settings_v3";
 const settings = Object.assign({
   quality: IS_MOBILE ? "low" : "medium", camera: "0", units: "mph", steer: "1", volume: "0.75",
   rumble: "on", fps: "off", laps: "5", opponents: "5", difficulty: "medium", grid: "back",
-  color: "#d8202a", onlineLaps: "3", name: "",
+  color: "#d8202a", onlineLaps: "3", name: "", touchSteer: "strip", tiltInvert: "off", tiltRange: "32",
 }, IS_MOBILE ? { opponents: "3", laps: "3" } : {}, (() => { try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch { return {}; } })());
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch {} };
 const Q = QUALITY[settings.quality] || QUALITY.medium;
@@ -217,6 +219,7 @@ class Session {
         this.state = "racing";
         this.raceT0 = this.goAt;
         for (const e of this.entries) if (!e.remote) e.kart.frozen = false;
+        calibrateTilt();
         track.setStartLights(0);
         if (this.mode !== "demo") { showLights(-1); banner("GO!", "gold", 900); audio.beep(true); }
       } else if (lit !== this.litShown) {
@@ -353,7 +356,7 @@ class Session {
   syncRemotes(dt) {
     for (const r of net.remotes.values()) {
       let e = this.entries.find(x => x.remote && x.id === r.id);
-      if (!e) { e = this.add({ id: r.id, name: r.name, color: r.color, number: r.id, remote: true }); e.kart.frozen = true; }
+      if (!e) { e = this.add({ id: r.id, name: r.name, color: r.color, number: r.no ?? r.id, remote: true }); e.kart.frozen = true; }
       const d = net.sample(r);
       const last = r.buf[r.buf.length - 1];
       e.hasState = !!d && net.serverNow() - last.t < 2000;      // stopped sending = parked in the lobby
@@ -534,7 +537,7 @@ function startTrial() {
 function startOnlineSession() {
   endSession();
   const s = session = new Session({ mode: "online", laps: Infinity });
-  const me = s.add({ id: net.id, name: settings.name || "Driver", color: settings.color, number: net.id, isPlayer: true });
+  const me = s.add({ id: net.id, name: settings.name || "Driver", color: settings.color, number: net.myNo ?? net.id, isPlayer: true });
   me.spectator = true;
   me.kart.frozen = true; me.kart.ghost = true;
   me.kart.reset(gridSlot(0));
@@ -566,7 +569,21 @@ function phoneFullscreen() {
   } catch {}
 }
 
+function startTiltIfChosen() {
+  if (!IS_TOUCH || settings.touchSteer !== "tilt") { $("hud").classList.remove("tiltmode"); return; }
+  $("hud").classList.add("tiltmode");
+  enableTilt().then(ok => {
+    setTimeout(() => {
+      if (!ok || !tilt.working) {
+        $("hud").classList.remove("tiltmode");
+        toast(ok ? "No tilt sensor here — using the touch strip" : "Tilt wasn't allowed — using the touch strip", "bad");
+      }
+    }, 1500);
+  });
+}
+
 function enterDriving() {
+  startTiltIfChosen();
   phoneFullscreen();
   closeMenus();
   hud(true);
@@ -578,15 +595,15 @@ function enterDriving() {
 // ---------------------------------------------------------------------------
 // online
 // ---------------------------------------------------------------------------
-async function goOnline(room) {
+async function goOnline(room, party = false) {
   const note = $("online-note");
   const name = ($("in-name").value || "").trim().slice(0, 16);
   settings.name = name; saveSettings();
   const url = defaultServerUrl();
-  if (!url) { note.textContent = "No multiplayer server is configured for this copy of the game."; return; }
-  note.textContent = "Connecting…";
+  if (!party && !url) { note.textContent = "No multiplayer server is configured for this copy of the game."; return; }
+  note.textContent = party ? (room === "new" ? "Setting up your party…" : "Joining the party…") : "Connecting…";
   if (net) net.close();
-  net = new NetClient(url);
+  net = party ? new PartyNet() : new NetClient(url);
   bindNet(net);
   try {
     const w = await net.connect({ name: name || "Driver", color: settings.color, room });
@@ -597,7 +614,7 @@ async function goOnline(room) {
     showScreen("scr-lobby", true);
     renderLobby();
   } catch (err) {
-    note.textContent = `${err.message || err}. ${location.hostname.endsWith("github.io") ? "GitHub Pages can't host the race server — see the README to deploy it." : `Server: ${url}`}`;
+    note.textContent = party ? `${err.message || err}.` : `${err.message || err}. ${location.hostname.endsWith("github.io") ? "GitHub Pages can't host the race server — use Create Party instead." : `Server: ${url}`}`;
     net = null;
   }
 }
@@ -1057,6 +1074,12 @@ function applySetting(key) {
   if (key === "camera" && session && session.player && cam.mode !== "tv") cam.setMode(Number(settings.camera));
   if (key === "onlineLaps" && net && net.room && net.room.host === net.id) net.send({ t: "laps", n: Number(settings.onlineLaps) });
   if (key === "quality") toast("Reload the page to apply graphics changes");
+  if (key === "tiltInvert" || key === "tiltRange") { tilt.invert = settings.tiltInvert === "on"; tilt.range = Number(settings.tiltRange); }
+  if (key === "touchSteer") {
+    if (settings.touchSteer === "tilt") enableTilt().then(ok => { if (!ok) toast("Tilt needs permission to use the motion sensor", "bad"); });
+    else disableTilt();
+    $("hud").classList.toggle("tiltmode", settings.touchSteer === "tilt");
+  }
 }
 
 function showResultsTable(rows, title, online = false) {
@@ -1075,6 +1098,7 @@ function pause() {
 }
 function resume() {
   paused = false;
+  calibrateTilt();
   closeMenus();
   if (session && session.state === "lobby") showScreen("scr-lobby", true);
 }
@@ -1088,6 +1112,12 @@ const ACTS = {
   race: () => startRace(),
   trial: () => startTrial(),
   quick: () => goOnline(""),
+  "party-create": () => goOnline("new", true),
+  "party-join": () => {
+    const code = ($("in-code").value || "").trim().toUpperCase();
+    if (!/^[A-Z]{4}$/.test(code)) { $("online-note").textContent = "Party codes are 4 letters."; return; }
+    goOnline(code, true);
+  },
   create: () => goOnline("new"),
   join: () => {
     const code = ($("in-code").value || "").trim().toUpperCase();
@@ -1120,7 +1150,13 @@ async function boot() {
   showScreen("scr-loading", true);
   for (const b of document.querySelectorAll(".opt")) renderOpt(b);
   $("fps").classList.toggle("hidden", settings.fps !== "on");
-  if (IS_TOUCH) { $("touch").classList.add("on"); $("hud").classList.add("touchmode"); }
+  if (IS_TOUCH) { $("touch").classList.add("on"); $("hud").classList.add("touchmode"); document.body.classList.add("is-touch"); }
+  tilt.invert = settings.tiltInvert === "on"; tilt.range = Number(settings.tiltRange);
+  // public matchmaking only where a game server answers
+  if (window.C2C_CONFIG && window.C2C_CONFIG.server) $("btn-quick").classList.remove("hidden");
+  else fetch("health").then(r => {
+    if (r.ok && (r.headers.get("content-type") || "").includes("json")) $("btn-quick").classList.remove("hidden");
+  }).catch(() => {});
   $("t-cam").addEventListener("touchstart", e => { e.preventDefault(); nextCamera(); }, { passive: false });
   bindTouchControls(document);
   $("t-pause").addEventListener("touchstart", e => { e.preventDefault(); pause(); }, { passive: false });
@@ -1196,4 +1232,4 @@ boot().catch(err => {
 });
 
 // for debugging in the console
-window.c2c = { get session() { return session; }, settings, LINE_X, LINE_Z };
+window.c2c = { get session() { return session; }, get net() { return net; }, settings, LINE_X, LINE_Z };

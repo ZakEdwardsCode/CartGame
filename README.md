@@ -14,8 +14,11 @@ No install, nothing to boot.
 - **Race** — 3 to 7 AI drivers, 3–10 laps, four difficulty levels. The AI drives the
   same physics as you: no rubber-banding, no extra grip.
 - **Time Trial** — flying laps against your own ghost, with a live delta.
-- **Online** — quick match or private 4-letter room codes, up to 8 drivers, ready-up
-  lobby, start lights synced to the server clock, results table.
+- **Race Friends (parties)** — create a party, send friends the 4-letter code, race.
+  No game server needed: inside Claude it uses Claude's live room; everywhere else
+  (GitHub Pages, itch.io) phones connect directly over WebRTC, introduced by the free
+  public PeerJS broker. The party creator's device relays everyone's karts.
+- **Quick Match** — public matchmaking when the game is served by `server.js`.
 
 ## Controls
 
@@ -30,7 +33,14 @@ No install, nothing to boot.
 | Pause | `Esc` / `P` | Start / Options |
 
 Menus work with the D-pad/stick, A to choose and B to go back. Controllers rumble on
-impacts, kerbs and grass. Touch controls appear on phones and tablets.
+impacts, kerbs and grass.
+
+**On a phone:** turn it sideways. Steer with the strip under your left thumb, or
+switch Settings → Phone Steering to **Tilt Phone** and turn the phone like a wheel
+(it centres itself when the lights go out; Tilt Direction flips it if it's backwards).
+GAS and BRAKE sit under your right thumb. Tilt needs the page opened directly in the
+phone's browser (e.g. GitHub Pages) — embedded viewers block the motion sensor, and
+the game falls back to the strip there.
 
 ## Physics
 
@@ -154,6 +164,11 @@ Loaded from CDN at runtime, so there are no binary assets in the repo:
   if the CDN is unreachable)
 - shadows, image-based lighting from a physical sky, SSAO (High), bloom, SMAA, ACES
   filmic tone mapping; Low / Medium / High presets in Settings
+
+## Open source
+
+MIT licensed (see `LICENSE`) — fork it, mod it, put it on your own site. Issues and
+pull requests welcome. `npm test` runs the test suites; there is no build step.
 
 ## Times
 
