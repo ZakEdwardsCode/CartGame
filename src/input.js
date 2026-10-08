@@ -95,18 +95,34 @@ function onOrientation(e) {
   const roll = Math.atan2(sx, -sy) * 180 / Math.PI;  // + = right side down
   tilt.roll += (roll - tilt.roll) * 0.35;            // light smoothing
 }
-// must be called from a tap (iOS asks permission then)
-export async function enableTilt() {
-  try {
-    const D = window.DeviceOrientationEvent;
-    if (D && typeof D.requestPermission === "function") {
-      const r = await D.requestPermission();
-      if (r !== "granted") return false;
-    }
-  } catch { return false; }
-  if (!tiltListening) { addEventListener("deviceorientation", onOrientation); tiltListening = true; }
-  tilt.enabled = true;
-  return true;
+// Must be called straight from a tap: iPhones only show the permission prompt
+// inside the tap itself. Resolves "ok", "denied", "embedded" or "unsupported".
+export function tiltNeedsTap() {
+  const D = window.DeviceOrientationEvent;
+  return !!(D && typeof D.requestPermission === "function") && !tiltGranted;
+}
+let tiltGranted = false;
+export function enableTilt() {
+  const listen = () => {
+    if (!tiltListening) { addEventListener("deviceorientation", onOrientation); tiltListening = true; }
+    tilt.enabled = true;
+  };
+  const D = window.DeviceOrientationEvent;
+  if (!D) return Promise.resolve("unsupported");
+  if (typeof D.requestPermission === "function" && !tiltGranted) {
+    let req;
+    try {
+      req = D.requestPermission();            // synchronous call: keeps the tap's permission
+      const M = window.DeviceMotionEvent;
+      if (M && typeof M.requestPermission === "function") M.requestPermission().catch(() => {});
+    } catch { return Promise.resolve(window.top !== window.self ? "embedded" : "denied"); }
+    return req.then(r => {
+      if (r === "granted") { tiltGranted = true; listen(); return "ok"; }
+      return window.top !== window.self ? "embedded" : "denied";
+    }, () => window.top !== window.self ? "embedded" : "denied");
+  }
+  listen();
+  return Promise.resolve("ok");
 }
 export function disableTilt() { tilt.enabled = false; tilt.steer = 0; }
 export function calibrateTilt() { tilt.zero = tilt.roll; }

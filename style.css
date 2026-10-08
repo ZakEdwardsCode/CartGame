@@ -104,6 +104,7 @@ html, body {
 .toast.good { background: rgba(53, 224, 122, .92); color: #04260f; }
 .toast.purple { background: rgba(160, 90, 240, .94); color: #fff; }
 .toast.bad { background: rgba(255, 77, 94, .92); color: #2a0407; }
+.toast.wrap { white-space: normal; width: min(520px, 86vw); text-align: center; line-height: 1.4; }
 
 .fps { right: 14px; top: 190px; font-size: 11px; color: var(--dim); background: var(--panel); padding: 2px 6px; border-radius: 4px; }
 .camname { bottom: 140px; right: 14px; font-size: 11px; color: var(--dim); letter-spacing: .1em; opacity: 0; transition: opacity .4s; }
@@ -143,6 +144,11 @@ html, body {
 .hud.touchmode .speed .spd { font-size: 26px; }
 .hud.touchmode .camname { display: none; }
 .hud.tiltmode #t-steer { display: none; }
+.tilt-tap {
+  position: absolute; left: 50%; top: 58%; transform: translate(-50%, -50%); pointer-events: all;
+  font: inherit; font-size: 18px; font-weight: 900; color: var(--accent-ink); background: var(--accent);
+  border: none; border-radius: 999px; padding: 18px 30px; box-shadow: 0 8px 30px rgba(0,0,0,.45);
+}
 body:not(.is-touch) .touch-only { display: none !important; }
 
 .rotate {

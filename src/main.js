@@ -19,7 +19,7 @@ import { Kart, World, SURFACES } from "./physics.js";
 import { AIDriver, DIFFICULTY } from "./ai.js";
 import {
   pollInput, readDriving, action, endFrame, rumble, bindTouchControls, setInputSettings, gamepadName,
-  tilt, enableTilt, disableTilt, calibrateTilt,
+  tilt, enableTilt, disableTilt, calibrateTilt, tiltNeedsTap,
 } from "./input.js";
 import { PartyNet } from "./party.js";
 import { NetClient, defaultServerUrl } from "./net.js";
@@ -42,7 +42,7 @@ const SETTINGS_KEY = "c2c_settings_v3";
 const settings = Object.assign({
   quality: IS_MOBILE ? "low" : "medium", camera: "0", units: "mph", steer: "1", volume: "0.75",
   rumble: "on", fps: "off", laps: "5", opponents: "5", difficulty: "medium", grid: "back",
-  color: "#d8202a", onlineLaps: "3", name: "", touchSteer: "strip", tiltInvert: "off", tiltRange: "32",
+  color: "#d8202a", onlineLaps: "3", name: "", touchSteer: "strip", tiltInvert: "off", tiltRange: "32", brakeAssist: "on",
 }, IS_MOBILE ? { opponents: "3", laps: "3" } : {}, (() => { try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch { return {}; } })());
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch {} };
 const Q = QUALITY[settings.quality] || QUALITY.medium;
@@ -277,6 +277,7 @@ class Session {
       }
       this._hitCooldown = Math.max(0, (this._hitCooldown || 0) - dt);
       if (k.bump > 0.3) rumble(0.0, 0.25 * k.bump, 60);
+      if (k.lockF || k.lockR) rumble(0.35, 0.5, 80);
       if (this.mode === "trial") this.recordGhost(rt);
       if (this.mode === "online" && net && !pl.spectator) this.sendState(dt);
     }
@@ -508,6 +509,7 @@ function startRace() {
   const diff = DIFFICULTY[settings.difficulty] || DIFFICULTY.medium;
   const s = session = new Session({ mode: "race", laps });
   const me = s.add({ id: 0, name: settings.name || "You", color: settings.color, number: 1, isPlayer: true });
+  me.kart.brakeAssist = settings.brakeAssist === "on";
   const ais = [];
   const used = AI_COLORS.filter(c => c !== settings.color);
   for (let k = 0; k < n; k++) {
@@ -530,6 +532,7 @@ function startTrial() {
   endSession();
   const s = session = new Session({ mode: "trial", laps: Infinity });
   const me = s.add({ id: 0, name: settings.name || "You", color: settings.color, number: 1, isPlayer: true });
+  me.kart.brakeAssist = settings.brakeAssist === "on";
   s.startGrid([me], 1.0);
   enterDriving();
 }
@@ -539,6 +542,7 @@ function startOnlineSession() {
   const s = session = new Session({ mode: "online", laps: Infinity });
   const me = s.add({ id: net.id, name: settings.name || "Driver", color: settings.color, number: net.myNo ?? net.id, isPlayer: true });
   me.spectator = true;
+  me.kart.brakeAssist = settings.brakeAssist === "on";
   me.kart.frozen = true; me.kart.ghost = true;
   me.kart.reset(gridSlot(0));
   s.state = "lobby";
@@ -569,17 +573,29 @@ function phoneFullscreen() {
   } catch {}
 }
 
+const GAME_URL = "https://zakedwardscode.github.io/CartGame/";
+function tiltProblem(r) {
+  $("hud").classList.remove("tiltmode");
+  const msg = {
+    embedded: `Tilt is blocked inside this app. Open ${GAME_URL.replace("https://", "")} in Safari or Chrome to use it.`,
+    denied: "The phone said no to motion access. Close the tab, open the game again and tap Allow.",
+    unsupported: "This browser has no tilt sensor support. Using the touch strip.",
+    silent: "No tilt readings from this phone. Using the touch strip.",
+  }[r] || "Tilt isn't available. Using the touch strip.";
+  toast("Tilt off: " + msg, "bad wrap", 7000);
+}
+// turn tilt on; when the phone needs a tap for permission, ask for one on screen
 function startTiltIfChosen() {
-  if (!IS_TOUCH || settings.touchSteer !== "tilt") { $("hud").classList.remove("tiltmode"); return; }
+  const tb = $("tilt-tap");
+  if (!IS_TOUCH || settings.touchSteer !== "tilt") { $("hud").classList.remove("tiltmode"); tb.classList.add("hidden"); return; }
   $("hud").classList.add("tiltmode");
-  enableTilt().then(ok => {
-    setTimeout(() => {
-      if (!ok || !tilt.working) {
-        $("hud").classList.remove("tiltmode");
-        toast(ok ? "No tilt sensor here — using the touch strip" : "Tilt wasn't allowed — using the touch strip", "bad");
-      }
-    }, 1500);
+  const go = () => enableTilt().then(r => {
+    if (r !== "ok") { tiltProblem(r); return; }
+    setTimeout(calibrateTilt, 300);          // centre on however the phone is held now
+    setTimeout(() => { if (!tilt.working) tiltProblem("silent"); }, 1500);
   });
+  if (tiltNeedsTap()) { tb.classList.remove("hidden"); tb.onclick = () => { tb.classList.add("hidden"); go(); }; }
+  else { tb.classList.add("hidden"); go(); }
 }
 
 function enterDriving() {
@@ -820,10 +836,10 @@ function setText(el, v) { if (texts.get(el) !== v) { texts.set(el, v); el.textCo
 function hud(on) { $("hud").classList.toggle("hidden", !on); }
 
 let toastTimer = null;
-function toast(msg, cls = "") {
+function toast(msg, cls = "", ms = 2400) {
   const el = $("toast");
   el.textContent = msg; el.className = "toast show " + cls;
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 2400);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), ms);
 }
 let bannerTimer = null;
 function banner(msg, cls = "", ms = 1500, small = "") {
@@ -941,7 +957,7 @@ function updateHud(dt) {
   setText($("h-spd"), v.toFixed(0));
   setText($("h-unit"), mph ? "MPH" : "KM/H");
   drawSpeedo(Math.abs(k.vx) / 23, k.input.throttle, k.input.brake);
-  const surf = k.offTrack ? ["OFF TRACK", "bad"] : (k.surfF === SURFACES.kerb || k.surfR === SURFACES.kerb) ? ["KERB", "kerb"] : ["TRACK", "ok"];
+  const surf = (k.lockF || k.lockR) ? ["WHEELS LOCKED", "bad"] : k.offTrack ? ["OFF TRACK", "bad"] : (k.surfF === SURFACES.kerb || k.surfR === SURFACES.kerb) ? ["KERB", "kerb"] : ["TRACK", "ok"];
   setText($("h-surf"), surf[0]); $("h-surf").className = "surf " + surf[1];
 
   if (s.wrongWay > 1.0) banner("WRONG WAY", "warn", 400);
@@ -1074,9 +1090,10 @@ function applySetting(key) {
   if (key === "camera" && session && session.player && cam.mode !== "tv") cam.setMode(Number(settings.camera));
   if (key === "onlineLaps" && net && net.room && net.room.host === net.id) net.send({ t: "laps", n: Number(settings.onlineLaps) });
   if (key === "quality") toast("Reload the page to apply graphics changes");
+  if (key === "brakeAssist" && session && session.player) session.player.kart.brakeAssist = settings.brakeAssist === "on";
   if (key === "tiltInvert" || key === "tiltRange") { tilt.invert = settings.tiltInvert === "on"; tilt.range = Number(settings.tiltRange); }
   if (key === "touchSteer") {
-    if (settings.touchSteer === "tilt") enableTilt().then(ok => { if (!ok) toast("Tilt needs permission to use the motion sensor", "bad"); });
+    if (settings.touchSteer === "tilt") enableTilt().then(r => { if (r !== "ok") tiltProblem(r); });
     else disableTilt();
     $("hud").classList.toggle("tiltmode", settings.touchSteer === "tilt");
   }
