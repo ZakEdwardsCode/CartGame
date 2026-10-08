@@ -3,88 +3,180 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-<title>Coast 2 Coast Karting — Hayle 3D Time Trial</title>
+<meta name="theme-color" content="#0d0f0e" />
+<meta name="description" content="Kart racing on a faithful recreation of Coast 2 Coast Karting, Hayle. Race AI, chase your ghost, or race friends online. Controller supported." />
+<title>Coast 2 Coast Karting</title>
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
 <canvas id="gl"></canvas>
 
-<div class="hud">
+<!-- ======================= HUD ======================= -->
+<div class="hud hidden" id="hud">
+  <div class="tower" id="tower"></div>
+
   <div class="clock">
-    <div class="lbl">Lap Time</div>
+    <div class="lapcount" id="h-lap">LAP 1/5</div>
     <div class="time" id="h-time">0:00.000</div>
     <div class="delta" id="h-delta"></div>
   </div>
 
   <div class="stats">
+    <div class="pos" id="h-pos"><span id="h-posn">1</span><small id="h-posof">/8</small></div>
     <div class="row best"><span>Best</span><span class="v" id="h-best">--:--.---</span></div>
     <div class="row"><span>Last</span><span class="v" id="h-last">--:--.---</span></div>
-    <div class="row"><span>Laps</span><span class="v" id="h-laps">0</span></div>
-    <div class="row"><span>Camera</span><span class="v" id="cam-name">Chase</span></div>
+    <div class="row net hidden" id="h-netrow"><span>Ping</span><span class="v" id="h-ping">--</span></div>
   </div>
 
   <div class="map-wrap"><canvas id="minimap"></canvas></div>
 
   <div class="speed">
-    <div class="mph"><span id="h-mph">0</span></div>
-    <div class="unit">MPH</div>
+    <canvas id="speedo" width="160" height="96"></canvas>
+    <div class="spd"><span id="h-spd">0</span><small id="h-unit">MPH</small></div>
     <div class="surf ok" id="h-surf">TRACK</div>
   </div>
 
-  <div class="times hidden" id="times-panel">
-    <h3>Local Best Times</h3>
-    <ol id="times-list"></ol>
-    <div class="hint">This device only</div>
-  </div>
-
+  <div class="lights" id="lights"><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="banner" id="banner"></div>
   <div class="toast" id="toast"></div>
-  <div class="countdown" id="countdown"></div>
+  <div class="fps hidden" id="fps"></div>
+  <div class="camname" id="camname"></div>
 
-  <div class="touch">
+  <div class="touch" id="touch">
     <div class="tbtn" id="t-left">◀</div>
     <div class="tbtn" id="t-right">▶</div>
-    <div class="tbtn" id="t-brake">✋</div>
+    <div class="tbtn" id="t-brake">■</div>
     <div class="tbtn" id="t-gas">▲</div>
+    <div class="tbtn small" id="t-pause">❚❚</div>
   </div>
 </div>
 
-<div class="overlay" id="overlay">
-  <h1>🏁 Coast 2 Coast Karting</h1>
-  <div class="sub">Hayle, Cornwall — 3D Time Trial</div>
+<!-- ======================= MENUS ======================= -->
+<div class="menus" id="menus">
 
-  <div class="grid">
-    <div><b>Accelerate</b> ↑ / W</div>
-    <div><b>Brake / Reverse</b> ↓ / S</div>
-    <div><b>Steer left</b> ← / A</div>
-    <div><b>Steer right</b> → / D</div>
-    <div><b>Change camera</b> C</div>
-    <div><b>Reset to grid</b> R</div>
-  </div>
+  <section class="screen" id="scr-loading">
+    <h1 class="logo"><span>COAST 2 COAST</span><b>KARTING</b></h1>
+    <div class="sub">Hayle · Cornwall</div>
+    <div class="loadbar"><div class="loadbar-fill" id="loadfill"></div></div>
+    <div class="loadnote" id="loadnote">starting engine…</div>
+  </section>
 
-  <button id="go" disabled>Loading…</button>
-  <div class="loadbar"><div class="loadbar-fill" id="loadfill"></div></div>
-  <div class="loadnote" id="loadnote">fetching track surfaces…</div>
+  <section class="screen" id="scr-title">
+    <h1 class="logo"><span>COAST 2 COAST</span><b>KARTING</b></h1>
+    <div class="sub">Hayle · Cornwall</div>
+    <nav class="menu">
+      <button data-go="scr-race">Race</button>
+      <button data-act="trial">Time Trial</button>
+      <button data-go="scr-online">Online</button>
+      <button data-go="scr-settings">Settings</button>
+      <button data-go="scr-help">How to Play</button>
+    </nav>
+    <div class="padhint" id="padhint"></div>
+  </section>
 
-  <div class="note">
-    The <b>current</b> layout — the circuit as hand-mapped in OpenStreetMap in July 2025,
-    not the older pre-rebuild track that still shows in most satellite imagery. OSM tags a
-    short section <i>covered</i> and the onboard lap video drives through a bridge at exactly
-    that point. 719&nbsp;m, 14 corners, elevation sampled from EU-DEM. Regulars lap here in
-    the low 40s. Fan-made for practice, not an official map. Times saved in this browser only.
-  </div>
+  <section class="screen" id="scr-race">
+    <h2>Race</h2>
+    <nav class="menu">
+      <button class="opt" data-key="laps" data-values="3,5,8,10" data-label="Laps"></button>
+      <button class="opt" data-key="opponents" data-values="3,5,7" data-label="Opponents"></button>
+      <button class="opt" data-key="difficulty" data-values="easy,medium,hard,alien" data-label="Difficulty"></button>
+      <button class="opt" data-key="grid" data-values="back,random,pole" data-label="Start"></button>
+      <button class="opt" data-key="color" data-values="#d8202a,#1f6fb2,#e6a417,#2a9d5b,#7a3fb8,#f06d1a,#e83e8c,#eceff1" data-label="Kart" data-swatch="1"></button>
+      <button class="primary" data-act="race">Start Race</button>
+      <button data-back>Back</button>
+    </nav>
+  </section>
+
+  <section class="screen" id="scr-online">
+    <h2>Online</h2>
+    <div class="field"><label for="in-name">Driver name</label><input id="in-name" maxlength="16" autocomplete="off" spellcheck="false" /></div>
+    <nav class="menu">
+      <button class="opt" data-key="color" data-values="#d8202a,#1f6fb2,#e6a417,#2a9d5b,#7a3fb8,#f06d1a,#e83e8c,#eceff1" data-label="Kart" data-swatch="1"></button>
+      <button class="primary" data-act="quick">Quick Match</button>
+      <button data-act="create">Create Private Room</button>
+      <div class="field inline"><input id="in-code" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false" /><button data-act="join">Join Room</button></div>
+      <button data-back>Back</button>
+    </nav>
+    <div class="note" id="online-note"></div>
+  </section>
+
+  <section class="screen" id="scr-lobby">
+    <h2>Lobby <small id="lobby-code"></small></h2>
+    <div class="lobby-status" id="lobby-status"></div>
+    <ul class="players" id="lobby-players"></ul>
+    <nav class="menu">
+      <button class="opt host-only" data-key="onlineLaps" data-values="1,3,5,8,10" data-label="Laps"></button>
+      <button class="primary" data-act="ready" id="btn-ready">Ready</button>
+      <button class="host-only" data-act="start">Start Race Now</button>
+      <button data-act="leave">Leave</button>
+    </nav>
+    <div class="note">Share the room code with friends so they can join. Everyone drives their own kart; the server keeps the race clock.</div>
+  </section>
+
+  <section class="screen" id="scr-settings">
+    <h2>Settings</h2>
+    <nav class="menu">
+      <button class="opt" data-key="quality" data-values="low,medium,high" data-label="Graphics"></button>
+      <button class="opt" data-key="camera" data-values="0,1,2,3,4" data-names="Chase,Far Chase,Cockpit,Bumper,Heli" data-label="Camera"></button>
+      <button class="opt" data-key="units" data-values="mph,kmh" data-names="MPH,KM/H" data-label="Speed"></button>
+      <button class="opt" data-key="steer" data-values="0.6,0.8,1,1.25,1.5" data-names="Very Low,Low,Normal,High,Very High" data-label="Stick Sensitivity"></button>
+      <button class="opt" data-key="volume" data-values="0,0.25,0.5,0.75,1" data-names="Off,25%,50%,75%,100%" data-label="Volume"></button>
+      <button class="opt" data-key="rumble" data-values="on,off" data-names="On,Off" data-label="Rumble"></button>
+      <button class="opt" data-key="fps" data-values="off,on" data-names="Off,On" data-label="FPS Counter"></button>
+      <button data-back>Back</button>
+    </nav>
+    <div class="note">Graphics changes apply after a reload.</div>
+  </section>
+
+  <section class="screen" id="scr-help">
+    <h2>How to Play</h2>
+    <table class="keys">
+      <tr><th></th><th>Keyboard</th><th>Controller</th></tr>
+      <tr><td>Accelerate</td><td>↑ / W</td><td>RT / R2 · A</td></tr>
+      <tr><td>Brake / reverse</td><td>↓ / S / Space</td><td>LT / L2 · X</td></tr>
+      <tr><td>Steer</td><td>← → / A D</td><td>Left stick</td></tr>
+      <tr><td>Camera</td><td>C</td><td>Y / Triangle</td></tr>
+      <tr><td>Look behind</td><td>B</td><td>LB / L1</td></tr>
+      <tr><td>Respawn on track</td><td>R</td><td>Back / Select</td></tr>
+      <tr><td>Pause</td><td>Esc / P</td><td>Start / Options</td></tr>
+      <tr><td>Standings</td><td>Tab</td><td>—</td></tr>
+    </table>
+    <div class="note">Karts brake mostly on the rear axle and have no differential: brake in a straight line, turn in smoothly and feed the power in. Lift mid-corner and the rear will rotate. Grass has half the grip.</div>
+    <nav class="menu"><button data-back>Back</button></nav>
+  </section>
+
+  <section class="screen" id="scr-pause">
+    <h2>Paused</h2>
+    <nav class="menu">
+      <button class="primary" data-act="resume">Resume</button>
+      <button data-act="restart" class="offline-only">Restart</button>
+      <button data-go="scr-settings">Settings</button>
+      <button data-act="quit">Quit to Menu</button>
+    </nav>
+  </section>
+
+  <section class="screen" id="scr-results">
+    <h2 id="res-title">Results</h2>
+    <table class="results" id="res-table"></table>
+    <nav class="menu" id="res-menu">
+      <button class="primary offline-only" data-act="restart">Race Again</button>
+      <button data-act="quit">Main Menu</button>
+    </nav>
+  </section>
 </div>
 
 <div class="fatal" id="fatal" hidden>
   <h2>Couldn't start</h2>
   <p id="fatal-msg"></p>
-  <p class="fatal-hint">This build loads three.js and its texture sets over the network, so it
-  needs to be opened from a local server rather than a <code>file://</code> path.
-  Run <code>node server.js</code> in the CartGame folder and open
-  <code>http://localhost:3001</code>.</p>
+  <p class="fatal-hint">The 3D engine loads from a CDN, so the game needs to be served over http(s)
+  rather than opened as a <code>file://</code> path. Run <code>node server.js</code> in the game
+  folder and open <code>http://localhost:3001</code>.</p>
 </div>
 
-<script src="track-data.js"></script>
+<script src="config.js"></script>
 <script type="importmap">
 {
   "imports": {
@@ -93,16 +185,15 @@
   }
 }
 </script>
-<script type="module" src="game.js"></script>
+<script type="module" src="src/main.js"></script>
 <script>
   // if the module never boots (file:// origin, offline, blocked CDN) say so
   setTimeout(() => {
     if (!window.__kartBooted) {
       document.getElementById("fatal").hidden = false;
-      document.getElementById("fatal-msg").textContent =
-        "The 3D engine didn't load.";
+      document.getElementById("fatal-msg").textContent = "The 3D engine didn't load.";
     }
-  }, 9000);
+  }, 12000);
 </script>
 </body>
 </html>

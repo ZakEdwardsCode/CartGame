@@ -1,27 +1,48 @@
-# Coast 2 Coast Karting — Hayle Time Trial
+# Coast 2 Coast Karting
 
-A browser 3D time-trial game of the real **Coast 2 Coast Karting** circuit on
-Chenhalls Road, St Erth, Hayle, Cornwall (TR27 6HJ). Jump in a kart, do laps,
-chase your own ghost.
+A 3D kart racing game on the real **Coast 2 Coast Karting** circuit on Chenhalls
+Road, St Erth, Hayle, Cornwall (TR27 6HJ). Race AI drivers, chase your own ghost,
+or race your mates online — keyboard, controller or touch.
 
 **Play it:** open the GitHub Pages URL for this repo (see *Deploying* below).
 No install, nothing to boot.
 
 ---
 
+## Modes
+
+- **Race** — 3 to 7 AI drivers, 3–10 laps, four difficulty levels. The AI drives the
+  same physics as you: no rubber-banding, no extra grip.
+- **Time Trial** — flying laps against your own ghost, with a live delta.
+- **Online** — quick match or private 4-letter room codes, up to 8 drivers, ready-up
+  lobby, start lights synced to the server clock, results table.
+
 ## Controls
 
-| Action | Key |
-|---|---|
-| Accelerate | `↑` / `W` |
-| Brake / reverse | `↓` / `S` |
-| Steer left | `←` / `A` |
-| Steer right | `→` / `D` |
-| Change camera | `C` — Chase / Cockpit / Nose / Heli |
-| Reset to grid | `R` |
-| Show best times | `L` |
+| Action | Keyboard | Controller (Xbox / PlayStation) |
+|---|---|---|
+| Accelerate | `↑` / `W` | RT / R2 · A |
+| Brake / reverse | `↓` / `S` / `Space` | LT / L2 · X |
+| Steer | `←` `→` / `A` `D` | Left stick |
+| Camera (Chase / Far / Cockpit / Bumper / Heli) | `C` | Y / Triangle |
+| Look behind | `B` | LB / L1 |
+| Respawn on track | `R` | Back / Select |
+| Pause | `Esc` / `P` | Start / Options |
 
-Touch controls appear automatically on phones and tablets.
+Menus work with the D-pad/stick, A to choose and B to go back. Controllers rumble on
+impacts, kerbs and grass. Touch controls appear on phones and tablets.
+
+## Physics
+
+`src/physics.js` is a planar rigid-body kart on a two-axle tyre model, stepped at 240 Hz:
+
+- Pacejka-style lateral tyre curve per axle, wider/grippier rears than fronts
+- longitudinal load transfer (brake = nose dives, front bites; power = rear squats)
+- solid rear axle drive with a friction circle, so power and braking eat cornering grip
+- brakes biased to the rear, as on a hire kart
+- per-axle surfaces: tarmac, kerbs (rumble) and grass (half the grip, lots of drag)
+- barriers placed midway between the circuit's closely packed sections, plus tyre walls
+  on the perimeter; impulse-based barrier and kart-to-kart collisions
 
 ---
 
@@ -75,48 +96,70 @@ not the track's own cut and fill.
 
 ## Running it
 
-The game uses ES modules, so it must be served over http — opening
-`index.html` from a `file://` path will not work.
-
 ```bash
 node server.js          # then open http://localhost:3001
 ```
 
-`server.js` is a zero-dependency static server using only Node built-ins.
+No `npm install`: the server (static files + multiplayer) uses Node built-ins only.
+`npm test` runs the physics, lap-counting, AI-race and multiplayer-server tests.
 
-## Deploying
+## Publishing
 
-The repo is a static site with `index.html` at the root, so GitHub Pages serves
-it directly:
+**Single player only, free:** GitHub Pages serves the repo as a static site.
+Settings → Pages → Source: *Deploy from a branch* → `main` / `/ (root)`.
+Race and Time Trial work there; Online needs the server below.
 
-**Settings → Pages → Source: Deploy from a branch → `main` / `/ (root)`**
+**Everything including online (recommended):** deploy `server.js` to any Node host. It
+serves the game *and* the race server from one URL, so there's nothing to configure.
+On [Render](https://render.com) the included `render.yaml` sets it up: New → Blueprint →
+pick this repo. Fly.io, Railway or a small VPS (`node server.js`, port from `$PORT`)
+work the same way. The server needs no GPU — graphics run on each player's device.
 
-Pages serves over https, which satisfies the ES-module requirement. On a free
-GitHub plan the repo must be public for Pages to work.
+**Both:** keep the game on GitHub Pages and point it at the hosted server by setting
+`server` in `config.js`, e.g. `wss://your-app.onrender.com/ws`. A `?server=` URL
+parameter overrides it for testing.
+
+The site is also installable as an app (web manifest), and the same files upload to
+itch.io as an HTML5 game.
 
 ---
 
 ## Files
 
-| File | What it is |
+| Path | What it is |
 |---|---|
-| `index.html` | Page shell, HUD, import map |
-| `game.js` | Engine — scene, PBR materials, post-processing, physics, lap timing, ghost |
+| `index.html`, `style.css` | Page, HUD and menus |
+| `src/main.js` | Game shell: sessions (race / trial / online / demo), cameras, HUD, menus, loop |
+| `src/physics.js` | Tyre model, collisions, fixed-step world |
+| `src/track.js` | Track geometry, barriers, racing line, speed profile, start grid |
+| `src/ai.js` | AI drivers |
+| `src/race.js` | Lap counting, sector checks, positions and gaps |
+| `src/input.js` | Keyboard, gamepad (with rumble) and touch |
+| `src/net.js` | Online client: clock sync and interpolation of other karts |
+| `src/world.js` | Scenery: terrain, tarmac, kerbs, barriers, fences, buildings, trees, lights |
+| `src/kart-model.js` | Procedural kart and driver |
+| `src/effects.js` | Skid marks, tyre smoke, grass spray, sparks |
+| `src/audio.js` | Procedural engine and effects audio |
 | `track-data.js` | The circuit: `[x, y, heading, halfWidthL, halfWidthR, elevation]` per metre |
-| `style.css` | HUD and overlay styling |
-| `server.js` | Optional local static server |
+| `server.js`, `server/` | Static + WebSocket race server (no dependencies) |
+| `config.js` | Optional external multiplayer server address |
+| `tests/` | `node --test` suites |
 
 ## Rendering
 
 Loaded from CDN at runtime, so there are no binary assets in the repo:
 
 - **three.js 0.160** via import map (jsDelivr)
-- **Poly Haven CC0 PBR textures** — asphalt, grass, concrete (diffuse + normal + roughness)
-- Post-processing: SSAO, bloom, SMAA, ACES filmic tone mapping
-- Physical sky with atmospheric scattering, used as the environment probe
+- **Poly Haven CC0 PBR textures** — asphalt, grass, concrete (with procedural fallbacks
+  if the CDN is unreachable)
+- shadows, image-based lighting from a physical sky, SSAO (High), bloom, SMAA, ACES
+  filmic tone mapping; Low / Medium / High presets in Settings
 
 ## Times
 
-Best laps are stored in **your browser's local storage only** — no server, no
-account, no global leaderboard. Once you set a lap, a ghost kart replays your
-best and a live delta shows how far up or down you are.
+Time-trial bests and your ghost are stored in **your browser's local storage**.
+Online results live only for the session.
+
+A note on lap times: with the mapped geometry (several hairpins under 6 m radius) the
+physics gives laps around 50 s for a quick driver, slower than the low-40s quoted for
+the real karts — the hand-mapped corners are likely tighter than the real ones.

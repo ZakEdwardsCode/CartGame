@@ -1,0 +1,9 @@
+# One-click deploy on Render (render.com): game + online multiplayer in one service.
+services:
+  - type: web
+    name: coast2coast-karting
+    runtime: node
+    plan: free
+    buildCommand: echo "no build step"
+    startCommand: node server.js
+    healthCheckPath: /health
