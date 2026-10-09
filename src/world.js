@@ -421,7 +421,8 @@ export class TrackWorld {
           const [ox, oz] = P(i, (bar + 14) * side);
           if (nearestGlobal(ox, oz, -1, 0, 16).i < 0) fence.push(k);
         }
-        const g = ribbon(front, [-0.4, 0.56], 1 / 10.5);
+        // the belt is seen from the track side; flip the text on the right-hand walls so it reads forwards
+        const g = ribbon(front, [-0.4, 0.56], (side > 0 ? -1 : 1) / 10.5);
         const belt = new THREE.Mesh(g, beltMat);
         belt.castShadow = true; belt.receiveShadow = true;
         this.scene.add(belt);
