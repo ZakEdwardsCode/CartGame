@@ -10,7 +10,9 @@ import {
 import { SPEC, SURFACES } from "./physics.js";
 
 // fraction of the tyre's peak grip a well-driven kart can actually use mid-corner
-export const PROFILE_GRIP = 0.88;
+export let PROFILE_GRIP = 0.95;
+export let BRAKE_FRAC = 0.5;
+export function tuneAI(g, b) { PROFILE_GRIP = g; BRAKE_FRAC = b; PROFILES.clear(); }
 
 const PROFILES = new Map();
 function profileFor(mu) {
@@ -18,7 +20,7 @@ function profileFor(mu) {
   if (!PROFILES.has(k)) {
     PROFILES.set(k, speedProfile({
       mu, vTop: 23,
-      aBrake: mu * 9.81 * 0.50,
+      aBrake: mu * 9.81 * BRAKE_FRAC,
       accel: v => Math.max(0.5, Math.min(SPEC.maxDrive, SPEC.power / Math.max(v, 1)) / SPEC.mass
         - 0.5 * 1.2 * SPEC.CdA * v * v / SPEC.mass - 0.25),
     }));
@@ -101,7 +103,7 @@ export class AIDriver {
     inp.steer = Math.max(-1, Math.min(1, delta / k.steerLimit() + this.wobble));
 
     // --- speed control against the profile, looking ahead by braking distance
-    const aB = SURFACES.tarmac.mu * PROFILE_GRIP * 9.81 * 0.5 * this.skill;
+    const aB = SURFACES.tarmac.mu * PROFILE_GRIP * 9.81 * BRAKE_FRAC * this.skill;
     let vt = 99;
     const horizon = Math.min(40, 2 + v * v / (2 * aB) + v * 0.25);
     for (let d = 0; d <= horizon; d += 1) {

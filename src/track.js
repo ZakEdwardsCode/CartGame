@@ -218,7 +218,7 @@ export const LINE = new Float32Array(N);     // lateral offset of the racing lin
 export const LINE_X = new Float32Array(N), LINE_Z = new Float32Array(N);
 export const LINE_K = new Float32Array(N);   // signed curvature (1/m), + = left
 {
-  const MARGIN = 1.0;
+  const MARGIN = 0.85;
   const lo = new Float32Array(N), hi = new Float32Array(N);
   for (let i = 0; i < N; i++) {
     lo[i] = -(Math.min(halfWidth(i, -1), BAR_L[i]) - MARGIN);
@@ -228,7 +228,7 @@ export const LINE_K = new Float32Array(N);   // signed curvature (1/m), + = left
   const place = i => { px[i] = cx(i) + RX[i] * LINE[i]; pz[i] = cz(i) + RZ[i] * LINE[i]; };
   for (let i = 0; i < N; i++) place(i);
   // biharmonic relaxation (minimises squared curvature) at decreasing scales
-  for (const [k, iters] of [[12, 400], [6, 400], [3, 600]]) {
+  for (const [k, iters] of [[12, 400], [6, 600]]) {
     for (let it = 0; it < iters; it++) {
       for (let i = 0; i < N; i++) {
         const a = wrap(i - 2 * k), b = wrap(i - k), c = wrap(i + k), d = wrap(i + 2 * k);
