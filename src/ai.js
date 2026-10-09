@@ -109,7 +109,7 @@ export class AIDriver {
     this.wobble *= Math.pow(0.2, dt);
 
     // --- pure pursuit on the (offset) racing line
-    const look = 2.4 + v * 0.32;
+    const look = 1.8 + v * 0.25;
     const ti = wrap(i + Math.round(look));
     const [lo, hi] = this.laneLimits(ti);
     let off = Math.max(lo, Math.min(hi, LINE[ti] + this.offset + this.lineBias * 0.3));
@@ -142,20 +142,26 @@ export class AIDriver {
       const allowed = Math.sqrt(vv * vv + 2 * aB * Math.max(0, d - v * 0.12));
       if (allowed < vt) vt = allowed;
     }
+    // giving way alongside only applies at racing speed: at the start, or crawling,
+    // two karts side by side must not both wait for the other forever
+    const crawl = 4;
     vt = Math.min(vt, follow);
-    if (squeezed) vt = Math.min(vt, v - 1.5);
-    // wheel to wheel and not ahead: concede rather than lean on them
-    if (this.latMin > -1e8 || this.latMax < 1e8) {
-      const tight = Math.min(k.lat - this.latMin, this.latMax - k.lat);
-      if (tight < 0.15) vt = Math.min(vt, v - 1.0);
+    if (v > crawl) {
+      if (squeezed) vt = Math.min(vt, v - 1.5);
+      if (this.latMin > -1e8 || this.latMax < 1e8) {
+        const tight = Math.min(k.lat - this.latMin, this.latMax - k.lat);
+        if (tight < 0.15) vt = Math.min(vt, v - 1.0);
+      }
     }
+    // never sit still unless something is genuinely right in front
+    if (follow > crawl) vt = Math.max(vt, Math.min(crawl, this.v[i]));
     if (k.offTrack) vt = Math.min(vt, 9);
     const err = vt - v;
     if (err > 0.3) { inp.throttle = Math.min(1, err * 0.8 + 0.4); inp.brake = 0; }
-    else if (err < -0.6) { inp.throttle = 0; inp.brake = Math.min(1, -err * 0.35) * (1 - 0.8 * Math.min(1, Math.abs(inp.steer))); }
-    else { inp.throttle = 0.35 + err * 0.5; inp.brake = 0; }
+    else if (err < -0.6) { inp.throttle = 0; inp.brake = Math.min(1, -err * 0.8) * (1 - 0.8 * Math.min(1, Math.abs(inp.steer))); }
+    else { inp.throttle = Math.max(0, Math.min(1, 0.8 + err * 0.5)); inp.brake = 0; }
     // traction control: ease off when the rear is sliding
-    if (k.skid > 0.5) inp.throttle *= 0.6;
+    if (k.skid > 0.8) inp.throttle *= 0.85;
 
     // --- recover if stuck against something
     if (v < 1.0 && inp.throttle > 0.5) this.stuck += dt; else this.stuck = Math.max(0, this.stuck - dt);
@@ -163,6 +169,7 @@ export class AIDriver {
     return false;
   }
 }
+
 
 export function mulberry32(a) {
   return function () {

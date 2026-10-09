@@ -100,3 +100,13 @@ test("AI never rear-ends a slower kart and never shoves a shielded player", () =
   assert.equal(rearEnds, 0, "AI ran into the back of the player");
   assert.equal(shoves, 0, "player was knocked by AI contact");
 });
+
+test("every AI kart gets away from the grid (no stand-offs between karts side by side)", () => {
+  for (const dt of [1 / 60, 1 / 30]) {          // also at a phone-like frame rate
+    const w = new World();
+    const ks = [], ais = [];
+    for (let n = 0; n < 8; n++) { const k = w.add(new Kart(n)); k.reset(gridSlot(n)); ks.push(k); ais.push(new AIDriver(k, 0.85 + n * 0.015, 0.01, n + 31)); }
+    for (let t = 0; t < 4; t += dt) { ais.forEach(a => a.update(dt, w.karts)); w.step(dt); }
+    for (const k of ks) assert.ok(k.vx > 3, `kart ${k.id} stuck on the grid at ${k.vx.toFixed(2)} m/s (dt ${dt})`);
+  }
+});
