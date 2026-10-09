@@ -77,3 +77,26 @@ test("AI field completes a 3-lap race without getting stuck", () => {
   assert.ok(respawns <= 2, `respawns ${respawns}`);
   for (const e of entries) for (const l of e.tracker.lapTimes) assert.ok(l.valid);
 });
+
+test("AI never rear-ends a slower kart and never shoves a shielded player", () => {
+  const w = new World();
+  const ks = [];
+  for (let n = 0; n < 6; n++) { const k = w.add(new Kart(n)); k.reset(gridSlot(n)); ks.push(k); }
+  const player = ks[5];
+  player.shielded = true;
+  const ais = ks.map((k, n) => new AIDriver(k, n === 5 ? 0.8 : 0.9 + n * 0.015, n === 5 ? 0.03 : 0.005, n + 21));
+  let rearEnds = 0, shoves = 0;
+  for (let f = 0; f < 60 * 120; f++) {
+    for (let n = 0; n < 6; n++) if (ais[n].update(1 / 60, n === 5 ? [player] : w.karts)) ks[n].reset(respawnPose(ks[n].idx));
+    const before = [player.vy, player.r];
+    w.step(1 / 60);
+    for (let n = 0; n < 5; n++) {
+      if (Math.hypot(ks[n].x - player.x, ks[n].z - player.z) >= 1.3) continue;
+      let ds = player.s - ks[n].s; if (ds < -N / 2) ds += N; if (ds > N / 2) ds -= N;
+      if (ds > 1.2) rearEnds++;
+    }
+    if (Math.hypot(player.vy - before[0], player.r - before[1]) > 0.8) shoves++;
+  }
+  assert.equal(rearEnds, 0, "AI ran into the back of the player");
+  assert.equal(shoves, 0, "player was knocked by AI contact");
+});

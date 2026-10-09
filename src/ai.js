@@ -60,24 +60,49 @@ export class AIDriver {
     const v = Math.max(0, k.vx);
     const i = k.idx;
 
-    // --- traffic: look for a kart close ahead and pick a side
-    this.offsetTarget *= Math.pow(0.4, dt);
-    let blocked = 1e9;
+    // --- racecraft: keep a safe gap, pass only where there's room, and
+    // never move across into a kart that's alongside
+    const aBr = SURFACES.tarmac.mu * PROFILE_GRIP * 9.81 * BRAKE_FRAC * 0.85;
+    let follow = 1e9;                 // speed that keeps us off the gearbox of the kart ahead
+    let latMin = -1e9, latMax = 1e9;  // lateral corridor left by karts alongside
+    let ahead = null, aheadDs = 1e9;
     for (const o of others) {
       if (o === k || o.ghost) continue;
       let ds = o.s - k.s;
       if (ds < -N / 2) ds += N; if (ds > N / 2) ds -= N;
-      if (ds > 0.5 && ds < 9) {
-        const dl = o.lat - (k.lat);
-        if (Math.abs(dl) < 1.6) {
-          const myLine = LINE[i] + this.offset;
-          const go = (o.lat > myLine) ? -1 : 1;
-          this.offsetTarget = go * 1.7;
-          if (ds < 5 && o.vx < k.vx) blocked = Math.min(blocked, o.vx + ds * 0.6);
-        }
+      const dl = o.lat - k.lat;                      // + = they're to our right
+      // alongside (any overlap, with a margin): leave them a kart's width
+      if (Math.abs(ds) < 2.9 && Math.abs(dl) < 3.2) {
+        if (dl > 0) latMax = Math.min(latMax, o.lat - 1.75);
+        else latMin = Math.max(latMin, o.lat + 1.75);
+      }
+      // ahead and in our path
+      if (ds > 0.3 && ds < 6 + v * 1.4 && Math.abs(dl) < 1.75) {
+        const gap = 2.3 + v * 0.12;
+        const room = Math.max(0, ds - gap);
+        const ov = Math.max(0, o.vx);
+        follow = Math.min(follow, Math.sqrt(ov * ov + 2 * aBr * room));
+        if (ds < aheadDs) { aheadDs = ds; ahead = o; }
       }
     }
-    this.offset += (this.offsetTarget - this.offset) * Math.min(1, dt * 2.0);
+    // pass when we're genuinely quicker and there's space on one side
+    this.passT = Math.max(0, (this.passT || 0) - dt);
+    if (ahead && aheadDs < 12 && this.v[i] * 0.98 > ahead.vx + 0.4 && this.passT <= 0) {
+      const [lo, hi] = this.laneLimits(wrap(i + Math.round(aheadDs)));
+      const roomL = (ahead.lat - 1.85) - lo, roomR = hi - (ahead.lat + 1.85);
+      const side = roomL > roomR ? -1 : 1;
+      if (Math.max(roomL, roomR) > 0) {
+        this.passSide = side;
+        this.passLat = ahead.lat + side * 1.85;
+        this.passT = 1.2;                      // commit to the move for a moment
+      }
+    }
+    if (this.passT > 0 && this.passLat != null) this.offsetTarget = this.passLat - LINE[i];
+    else this.offsetTarget *= Math.pow(0.35, dt);
+    this.offset += (this.offsetTarget - this.offset) * Math.min(1, dt * 1.8);
+    this.latMin = latMin; this.latMax = latMax;
+    // boxed in alongside with nowhere to go: back out rather than lean on them
+    const squeezed = latMin > latMax - 0.2;
 
     // --- occasional small mistakes
     if (this.rand() < this.mistakes * dt * 10) this.wobble = (this.rand() - 0.5) * 0.5;
@@ -87,7 +112,9 @@ export class AIDriver {
     const look = 2.4 + v * 0.32;
     const ti = wrap(i + Math.round(look));
     const [lo, hi] = this.laneLimits(ti);
-    const off = Math.max(lo, Math.min(hi, LINE[ti] + this.offset + this.lineBias * 0.3));
+    let off = Math.max(lo, Math.min(hi, LINE[ti] + this.offset + this.lineBias * 0.3));
+    // stay inside the corridor the karts alongside leave us
+    off = Math.max(this.latMin, Math.min(this.latMax, off));
     const tx = cx(ti) + RX[ti] * off, tz = cz(ti) + RZ[ti] * off;
     const dx = tx - k.x, dz = tz - k.z;
     const c = Math.cos(k.yaw), s = Math.sin(k.yaw);
@@ -100,7 +127,11 @@ export class AIDriver {
     // counter-steer when the rear steps out
     const beta = Math.atan2(k.vy, Math.max(2, Math.abs(k.vx)));
     delta += beta * 0.6;
-    inp.steer = Math.max(-1, Math.min(1, delta / k.steerLimit() + this.wobble));
+    // too close alongside: ease away now rather than waiting for the line to
+    let away = 0;
+    if (k.lat > this.latMax - 0.25) away += Math.min(0.5, (k.lat - this.latMax + 0.25) * 0.6);   // move left
+    if (k.lat < this.latMin + 0.25) away -= Math.min(0.5, (this.latMin + 0.25 - k.lat) * 0.6);   // move right
+    inp.steer = Math.max(-1, Math.min(1, delta / k.steerLimit() + this.wobble + away));
 
     // --- speed control against the profile, looking ahead by braking distance
     const aB = SURFACES.tarmac.mu * PROFILE_GRIP * 9.81 * BRAKE_FRAC * this.skill;
@@ -111,7 +142,13 @@ export class AIDriver {
       const allowed = Math.sqrt(vv * vv + 2 * aB * Math.max(0, d - v * 0.12));
       if (allowed < vt) vt = allowed;
     }
-    vt = Math.min(vt, blocked);
+    vt = Math.min(vt, follow);
+    if (squeezed) vt = Math.min(vt, v - 1.5);
+    // wheel to wheel and not ahead: concede rather than lean on them
+    if (this.latMin > -1e8 || this.latMax < 1e8) {
+      const tight = Math.min(k.lat - this.latMin, this.latMax - k.lat);
+      if (tight < 0.15) vt = Math.min(vt, v - 1.0);
+    }
     if (k.offTrack) vt = Math.min(vt, 9);
     const err = vt - v;
     if (err > 0.3) { inp.throttle = Math.min(1, err * 0.8 + 0.4); inp.brake = 0; }
