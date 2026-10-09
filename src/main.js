@@ -713,7 +713,7 @@ function renderLobby() {
   const r = net.room, isHost = r.host === net.id;
   $("lobby-code").textContent = r.private ? r.code : "PUBLIC";
   const me = r.players.find(p => p.id === net.id);
-  $("lobby-players").innerHTML = r.players.map(p => `<li><i style="background:${p.color}"></i><span>${esc(p.name)}${p.id === r.host ? " ★" : ""}${p.id === net.id ? " (you)" : ""}</span>` +
+  $("lobby-players").innerHTML = r.players.map(p => `<li><i style="background:${col(p.color)}"></i><span>${esc(p.name)}${p.id === r.host ? " ★" : ""}${p.id === net.id ? " (you)" : ""}</span>` +
     `<em class="${p.ready ? "rdy" : ""}">${r.phase === "racing" ? (p.racing ? `lap ${p.laps}` : "waiting") : p.ready ? "READY" : "not ready"}</em></li>`).join("");
   let status = "";
   if (r.phase === "racing") status = me && me.racing ? "Racing" : "Race in progress — you're in the next one. Spectating…";
@@ -729,7 +729,9 @@ function renderLobby() {
   if (!isHost) { settings.onlineLaps = String(r.laps); renderOpts("onlineLaps"); }
   refreshFocus();
 }
-const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// only ever put a plain #rrggbb into a style attribute
+const col = c => /^#[0-9a-fA-F]{6}$/.test(c) ? c : "#888888";
 
 // ---------------------------------------------------------------------------
 // cameras
@@ -967,7 +969,7 @@ function updateHud(dt) {
   if (towerT <= 0) {
     towerT = 0.25;
     const tw = $("tower");
-    if (s.mode === "trial") tw.innerHTML = trial.top.slice(0, 5).map((r, i) => `<div class="r"><b>${i + 1}</b><i style="background:${i ? "#555" : "#b26bff"}"></i><span>${fmt(r.t)}</span><em>${r.date}</em></div>`).join("");
+    if (s.mode === "trial") tw.innerHTML = trial.top.slice(0, 5).map((r, i) => `<div class="r"><b>${i + 1}</b><i style="background:${i ? "#555" : "#b26bff"}"></i><span>${fmt(r.t)}</span><em>${esc(r.date)}</em></div>`).join("");
     else {
       const order = s.order();
       const leader = order[0];
@@ -980,7 +982,7 @@ function updateHud(dt) {
           if (behind >= N) gap = `+${Math.floor(behind / N)}L`;
           else { const g = s.gap.gap(e.tracker.dist, rt); gap = g != null ? `+${g.toFixed(1)}` : ""; }
         }
-        return `<div class="r${e.isPlayer ? " me" : ""}${e.tracker.finished ? " fin" : ""}"><b>${i + 1}</b><i style="background:${e.color}"></i><span>${esc(e.name)}</span><em>${gap}</em></div>`;
+        return `<div class="r${e.isPlayer ? " me" : ""}${e.tracker.finished ? " fin" : ""}"><b>${i + 1}</b><i style="background:${col(e.color)}"></i><span>${esc(e.name)}</span><em>${gap}</em></div>`;
       }).join("");
     }
   }
@@ -1104,7 +1106,7 @@ function showResultsTable(rows, title, online = false) {
   hud(false);
   $("res-title").textContent = title;
   $("res-table").innerHTML = `<tr><th>Pos</th><th>Driver</th><th>Time</th><th>Best lap</th></tr>` +
-    rows.map(r => `<tr class="${r.me ? "me" : ""}"><td class="p">${r.pos}</td><td><i style="background:${r.color}"></i>${esc(r.name)}</td><td>${r.time}</td><td>${fmt(r.best)}</td></tr>`).join("");
+    rows.map(r => `<tr class="${r.me ? "me" : ""}"><td class="p">${r.pos}</td><td><i style="background:${col(r.color)}"></i>${esc(r.name)}</td><td>${esc(r.time)}</td><td>${fmt(r.best)}</td></tr>`).join("");
   showScreen("scr-results", true);
   if (online) for (const el of document.querySelectorAll(".offline-only")) el.classList.add("hidden");
 }

@@ -33,6 +33,13 @@ const MIME = {
   ".ogg": "audio/ogg",
   ".mp3": "audio/mpeg",
 };
+const SECURITY_HEADERS = {
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "X-Frame-Options": "SAMEORIGIN",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=(), accelerometer=(self), gyroscope=(self)",
+};
+const MAX_SOCKETS = 2000, MAX_PER_IP = 12;
 // only these top-level entries are public
 const PUBLIC = new Set(["index.html", "style.css", "config.js", "track-data.js", "manifest.webmanifest", "src", "assets", "icon.svg"]);
 
@@ -43,7 +50,7 @@ const server = http.createServer((req, res) => {
   if (reqPath === "/") reqPath = "/index.html";
 
   if (reqPath === "/health") {
-    res.writeHead(200, { "Content-Type": "application/json" });
+    res.writeHead(200, { "Content-Type": "application/json", ...SECURITY_HEADERS });
     res.end(JSON.stringify({ ok: true, ...race.stats() }));
     return;
   }
@@ -66,6 +73,7 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, {
       "Content-Type": MIME[ext] || "application/octet-stream",
       "Cache-Control": ext === ".html" ? "no-cache" : "public, max-age=300",
+      ...SECURITY_HEADERS,
     });
     res.end(data);
   });
@@ -73,9 +81,19 @@ const server = http.createServer((req, res) => {
 
 const race = new RaceServer({ log: (...a) => console.log(new Date().toISOString().slice(11, 19), ...a) });
 const sockets = new Set();
+const perIp = new Map();
 attachWebSocket(server, "/ws", ws => {
+  // behind a proxy (Render, Fly) the client address is the first X-Forwarded-For hop
+  const ip = String(ws.req.headers["x-forwarded-for"] || ws.req.socket.remoteAddress || "").split(",")[0].trim();
+  const n = perIp.get(ip) || 0;
+  if (sockets.size >= MAX_SOCKETS || n >= MAX_PER_IP) { ws.close(1013); return; }
+  perIp.set(ip, n + 1);
   sockets.add(ws);
-  ws.on("close", () => sockets.delete(ws));
+  ws.on("close", () => {
+    sockets.delete(ws);
+    const left = (perIp.get(ip) || 1) - 1;
+    if (left <= 0) perIp.delete(ip); else perIp.set(ip, left);
+  });
   race.connect(ws);
 });
 

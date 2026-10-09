@@ -22,6 +22,36 @@ const START_DELAY = 6500;      // ms from "start" to green light
 const FINISH_GRACE = 45000;
 const RESULTS_HOLD = 12000;
 
+// Everything another player's device sends is untrusted: normalise it once,
+// here, before any of it reaches the game or the page.
+const cleanName = n => String(n ?? "").replace(/[\u0000-\u001f<>&"'`]/g, "").trim().slice(0, 16) || "Driver";
+const cleanColor = c => /^#[0-9a-fA-F]{6}$/.test(c) ? c : "#888888";
+const cleanInt = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(Number(v)) || 0));
+const cleanMs = v => (typeof v === "number" && isFinite(v) && v > 0 && v < 3.6e6) ? Math.round(v) : null;
+function cleanState(st) {
+  if (!st || typeof st !== "object" || !st.n) return null;
+  const out = {
+    n: cleanName(st.n), c: cleanColor(st.c), no: cleanInt(st.no, 0, 99), rd: !!st.rd,
+    lp: cleanInt(st.lp, 0, 99), b: cleanMs(st.b), f: cleanMs(st.f),
+    rid: typeof st.rid === "string" ? st.rid.slice(0, 16) : null,
+    L: cleanInt(st.L, 1, 10), host: !!st.host,
+    kt: typeof st.kt === "number" && isFinite(st.kt) ? st.kt : 0,
+    k: Array.isArray(st.k) ? st.k.slice(0, 16).map(v => (typeof v === "number" && isFinite(v) && Math.abs(v) < 1e5) ? v : 0) : null,
+  };
+  const h = st.h;
+  if (h && typeof h === "object" && typeof h.rid === "string" && Array.isArray(h.grid) && typeof h.at === "number" && isFinite(h.at)) {
+    const now = Date.now();
+    // a race start more than 30 s ahead or 30 min old is nonsense: ignore it
+    if (h.at < now + 30000 && h.at > now - 1.8e6) {
+      out.h = {
+        rid: h.rid.slice(0, 16), at: h.at, laps: cleanInt(h.laps, 1, 10),
+        grid: h.grid.slice(0, 16).filter(id => typeof id === "string").map(id => id.slice(0, 64)),
+      };
+    }
+  }
+  return out;
+}
+
 export function newCode() {
   const A = "ABCDEFGHJKLMNPQRSTUVWXYZ";
   let s = "";
@@ -92,7 +122,14 @@ class PeerTransport {
     this.peer.on("disconnected", () => { try { this.peer.reconnect(); } catch {} });
     if (isHost) {
       this.peer.on("connection", conn => {
-        conn.on("data", m => { if (m && m.p && typeof m.p === "object") { this.states.set(conn.peer, m.p); this.conns.set(conn.peer, conn); this.emit(); } });
+        conn.on("data", m => {
+          if (!m || !m.p || typeof m.p !== "object") return;
+          if (!this.conns.has(conn.peer) && this.conns.size >= 15) { conn.close(); return; }   // party full
+          const st = cleanState(m.p);
+          if (!st) return;
+          st.host = false; delete st.h;           // only the host itself can be host
+          this.states.set(conn.peer, st); this.conns.set(conn.peer, conn); this.emit();
+        });
         conn.on("close", () => { this.states.delete(conn.peer); this.conns.delete(conn.peer); this.emit(); });
         conn.on("error", () => {});
       });
@@ -247,7 +284,7 @@ export class PartyNet extends NetClient {
     const t = this.transport;
     if (!t) return;
     const now = Date.now();
-    const peers = t.list().filter(p => p.state && p.state.n);
+    const peers = t.list().map(p => ({ id: String(p.id).slice(0, 64), isMe: p.isMe, state: cleanState(p.state) })).filter(p => p.state);
     const host = peers.find(p => p.state.host);
     if (host) this.lastHostSeen = now;
     else if (!this.isHost && now - this.lastHostSeen > 6000) { this.lost(); return; }
@@ -261,10 +298,10 @@ export class PartyNet extends NetClient {
         r = { id: p.id, name: st.n, color: st.c, no: st.no, racing: false, buf: [] };
         this.remotes.set(p.id, r);
       }
-      r.name = String(st.n).slice(0, 16); r.color = /^#[0-9a-f]{6}$/i.test(st.c) ? st.c : "#888888"; r.no = st.no;
+      r.name = st.n; r.color = st.c; r.no = st.no;
       if (Array.isArray(st.k) && st.kt !== this.lastKt.get(p.id)) {
         this.lastKt.set(p.id, st.kt);
-        r.buf.push({ t: now, d: st.k.map(v => typeof v === "number" && isFinite(v) ? v : 0) });
+        r.buf.push({ t: now, d: st.k });
         if (r.buf.length > 30) r.buf.shift();
       }
       if (!this.known.has(p.id)) { this.known.set(p.id, r.name); this.dispatchEvent(new CustomEvent("joined", { detail: { id: p.id, name: r.name } })); }
@@ -278,7 +315,7 @@ export class PartyNet extends NetClient {
 
     // --- the race, as published by the host
     const h = host && host.state.h;
-    const race = h && typeof h.rid === "string" && Array.isArray(h.grid) && isFinite(h.at) ? h : null;
+    const race = h || null;
     if (race && race.rid !== this.seenRid) {
       this.seenRid = race.rid;
       this.raceInfo = { rid: race.rid, at: race.at, laps: Math.max(1, Math.min(10, race.laps | 0)), grid: race.grid };
@@ -314,7 +351,7 @@ export class PartyNet extends NetClient {
           return (b.state.lp || 0) - (a.state.lp || 0);
         });
         const list = order.map((p, i) => ({
-          id: p.id, name: String(p.state.n).slice(0, 16), color: p.state.c, pos: i + 1,
+          id: p.id, name: p.state.n, color: p.state.c, pos: i + 1,
           ms: inRace(p) ? p.state.f : null, best: inRace(p) ? p.state.b : null, laps: inRace(p) ? p.state.lp || 0 : 0,
           dnf: !(inRace(p) && p.state.f != null),
         }));
@@ -337,7 +374,7 @@ export class PartyNet extends NetClient {
       t: "room", code: this.code, private: true, phase, host: host ? host.id : null,
       laps: (host && host.state.L) || 3, autoAt: this.autoAt || (phase === "lobby" && peers.length >= 2 && peers.every(p => p.state.rd) ? 1 : 0),
       players: peers.map(p => ({
-        id: p.id, name: String(p.state.n).slice(0, 16), color: p.state.c, ready: !!p.state.rd,
+        id: p.id, name: p.state.n, color: p.state.c, ready: !!p.state.rd,
         racing: phase === "racing" && !!ri && ri.grid.includes(p.id), laps: p.state.lp || 0, best: p.state.b ?? null, fin: p.state.f ?? null,
       })),
     };
