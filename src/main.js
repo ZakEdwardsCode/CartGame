@@ -510,6 +510,7 @@ function startRace() {
   const s = session = new Session({ mode: "race", laps });
   const me = s.add({ id: 0, name: settings.name || "You", color: settings.color, number: 1, isPlayer: true });
   me.kart.brakeAssist = settings.brakeAssist === "on";
+  me.kart.shielded = true;          // clean racing: AI contact never knocks you off line
   const ais = [];
   const used = AI_COLORS.filter(c => c !== settings.color);
   for (let k = 0; k < n; k++) {

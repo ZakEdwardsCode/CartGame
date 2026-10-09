@@ -325,7 +325,10 @@ function collidePair(A, B) {
     const minD = SA.radius + SB.radius;
     if (dist >= minD || dist < 1e-6) continue;
     const nx = dx / dist, nz = dz / dist, pen = minD - dist;
-    const aMov = !A.remote, bMov = !B.remote;
+    // remote karts are moved by their owner; a shielded kart (the player, with
+    // clean racing on) is never shoved by the AI — the AI kart takes the knock
+    const aMov = !A.remote && !(A.shielded && !B.shielded && !B.remote);
+    const bMov = !B.remote && !(B.shielded && !A.shielded && !A.remote);
     const wA = aMov ? 1 : 0, wB = bMov ? 1 : 0;
     if (wA + wB === 0) continue;
     const share = 1 / (wA + wB);
